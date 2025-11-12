@@ -385,7 +385,13 @@
         maximumFractionDigits: 0
     });
     
-    let procurementListTemplate = {}; // 存储从云端加载的数据
+    // 核心修改：统一管理云端数据结构
+    let cloudData = {
+        productTemplate: {}, // 主清单
+        cartData: []         // 购物车数据
+    };
+    
+    let grandTotalCost = 0; 
 
     // --- 智能分类关键字映射 ---
     const KEYWORD_MAP = {
@@ -401,20 +407,14 @@
         '盐': '调料/酱料 🧂🧄', '姜': '调料/酱料 🧂🧄',
     };
 
-    // --- 核心变量和本地存储键 (购物车仍使用本地存储) ---
-    let cartItems = []; 
-    const CART_STORAGE_KEY = 'bbqCart';      
-    let grandTotalCost = 0; 
-
-    // --- 云同步函数 (新增) ---
+    // --- 云同步函数 (更新) ---
     
     /**
-     * 从 JSONBin 加载采购清单数据
+     * 从 JSONBin 加载采购清单和购物车数据
      */
     async function loadProductsFromCloud() {
         if (!JSONBIN_ID || !JSONBIN_MASTER_KEY) {
-             // 理论上不应该运行，因为上面已经填入了 key
-             procurementListTemplate = {};
+             cloudData = { productTemplate: {}, cartData: [] };
              DOM.loadingOverlay.textContent = "❗ 错误：配置信息丢失。";
              return;
         }
@@ -428,13 +428,20 @@
             });
 
             if (!response.ok) {
-                // 如果 Bin 是 Private，会在这里失败
                 throw new Error(`HTTP error! status: ${response.status}. 请检查 Bin 是否设置为 Public。`);
             }
 
             const json = await response.json();
-            if (json && json.record && typeof json.record === 'object') {
-                procurementListTemplate = json.record;
+            
+            // 核心修改：检查新的双重结构
+            if (json && json.record && json.record.productTemplate && Array.isArray(json.record.cartData)) {
+                cloudData.productTemplate = json.record.productTemplate;
+                cloudData.cartData = json.record.cartData;
+            } else if (json && json.record && typeof json.record === 'object') {
+                // 如果是旧的单层结构，尝试兼容，并提示用户需要更新JSONBin结构
+                cloudData.productTemplate = json.record;
+                cloudData.cartData = [];
+                console.warn('云端数据结构为旧版本，请在 JSONBin 中更新为包含 productTemplate 和 cartData 的新结构。');
             } else {
                 throw new Error('云端数据格式不正确。');
             }
@@ -443,12 +450,14 @@
             DOM.loadingOverlay.textContent = "❌ 加载失败，请检查配置或 Bin 权限。";
             alert("加载云端数据失败！请检查 JSONBin 配置是否正确，特别是 Bin 是否为 Public。");
         } finally {
-            // 无论成功失败，都尝试渲染
-            for (const category in procurementListTemplate) {
+            // 渲染所有数据
+            for (const category in cloudData.productTemplate) {
                 sortCategory(category);
             }
             renderProductList();
             populateCategorySelect();
+            renderCart(); // 新增：加载后立即渲染购物车
+            
             // 隐藏加载层
             DOM.loadingOverlay.style.opacity = '0';
             setTimeout(() => DOM.loadingOverlay.style.display = 'none', 300);
@@ -456,19 +465,20 @@
     }
 
     /**
-     * 将采购清单数据上传到 JSONBin
+     * 将采购清单和购物车数据一起上传到 JSONBin
      */
     async function saveProductsToCloud() {
         if (!JSONBIN_ID || !JSONBIN_MASTER_KEY) return;
         
-        const dataToSave = procurementListTemplate;
+        // 核心修改：保存整个 cloudData 对象
+        const dataToSave = cloudData; 
 
         try {
             const response = await fetch(JSONBIN_URL, {
-                method: 'PUT', // 使用 PUT 进行更新
+                method: 'PUT', 
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Master-Key': JSONBIN_MASTER_KEY, // 需要 Master Key 才能写入
+                    'X-Master-Key': JSONBIN_MASTER_KEY, 
                     'X-Bin-Versioning': 'false' 
                 },
                 body: JSON.stringify(dataToSave)
@@ -507,19 +517,15 @@
     }
 
     function sortCategory(categoryKey) {
-        if (procurementListTemplate[categoryKey]) {
-            procurementListTemplate[categoryKey].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+        if (cloudData.productTemplate[categoryKey]) {
+            cloudData.productTemplate[categoryKey].sort((a, b) => a.localeCompare(b, 'zh-CN'));
         }
     }
 
     // --- 初始化和加载 ---
 
     document.addEventListener('DOMContentLoaded', () => {
-        // 1. 加载购物车（本地存储）
-        loadCart();     
-        renderCart();   
-        
-        // 2. 从云端加载产品清单，并渲染所有界面
+        // 只需要从云端加载一次
         loadProductsFromCloud(); 
         
         // 初始打开选品页面
@@ -528,7 +534,7 @@
 
     function populateCategorySelect() {
         let optionsHtml = '';
-        for (const category in procurementListTemplate) {
+        for (const category in cloudData.productTemplate) {
             optionsHtml += `<option value="${category}">${category}</option>`;
         }
         DOM.newProductCategory.innerHTML = optionsHtml;
@@ -558,6 +564,11 @@
             const initialTabButton = document.querySelector(`.tab-button[data-tab="${tabName}"]`);
             if (initialTabButton) initialTabButton.classList.add("active");
         }
+        
+        // 核心修改：每次切换到购物车时，强制重新渲染一次，以保证数据同步
+        if (tabName === 'cart-tab') {
+            loadProductsFromCloud(); // 重新加载云端数据
+        }
     }
     
     // --- 1. 下单页面逻辑 (选品) ---
@@ -565,13 +576,13 @@
     function renderProductList() {
         let listHtml = '';
         
-        for (const category in procurementListTemplate) {
+        for (const category in cloudData.productTemplate) {
             // 性能优化：确保每次渲染前都排序
             sortCategory(category); 
             
             listHtml += `<h2>${category}</h2>`;
 
-            const items = procurementListTemplate[category];
+            const items = cloudData.productTemplate[category];
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
                 const uniqueId = `${category}-${item}`;
@@ -608,8 +619,8 @@
             const trimmedNewName = newName.trim();
             
             let isDuplicate = false;
-            for (const cat in procurementListTemplate) {
-                if (procurementListTemplate[cat].includes(trimmedNewName)) {
+            for (const cat in cloudData.productTemplate) {
+                if (cloudData.productTemplate[cat].includes(trimmedNewName)) {
                     isDuplicate = true;
                     break;
                 }
@@ -620,22 +631,22 @@
                 return;
             }
             
-            const list = procurementListTemplate[category];
+            const list = cloudData.productTemplate[category];
             const oldIndex = list.indexOf(oldName);
             
             if (oldIndex !== -1) {
                 list[oldIndex] = trimmedNewName;
                 sortCategory(category);
                 
-                await saveProductsToCloud();
-                
-                for (let i = 0; i < cartItems.length; i++) {
-                    if (cartItems[i].name === oldName) {
-                        cartItems[i].name = trimmedNewName;
+                // 核心修改：同步更新购物车中的项目名称
+                for (let i = 0; i < cloudData.cartData.length; i++) {
+                    if (cloudData.cartData[i].name === oldName) {
+                        cloudData.cartData[i].name = trimmedNewName;
                         break; 
                     }
                 }
-                saveCart();
+                
+                await saveProductsToCloud();
                 
                 renderProductList();
                 renderCart();
@@ -646,16 +657,16 @@
     // *** 数据更新后需要调用 saveProductsToCloud() ***
     async function deleteProduct(category, name) {
         if (confirm(`确定要从清单中删除采购项 "${name}" 吗？此操作将无法撤销。`)) {
-            const list = procurementListTemplate[category];
+            const list = cloudData.productTemplate[category];
             const oldIndex = list.indexOf(name);
             
             if (oldIndex !== -1) {
                 list.splice(oldIndex, 1);
                 
-                await saveProductsToCloud();
+                // 核心修改：同步移除购物车中的项目
+                cloudData.cartData = cloudData.cartData.filter(item => item.name !== name);
                 
-                cartItems = cartItems.filter(item => item.name !== name);
-                saveCart();
+                await saveProductsToCloud();
                 
                 renderProductList();
                 renderCart();
@@ -663,13 +674,14 @@
         }
     }
 
-    function addSelectedToCart() {
+    async function addSelectedToCart() {
         const checkboxes = document.querySelectorAll('#product-list input[type="checkbox"]');
         let selectedCount = 0;
         
+        // 核心修改：使用云端数据作为旧购物车
         const oldCartMap = new Map();
-        for (let i = 0; i < cartItems.length; i++) {
-            const item = cartItems[i];
+        for (let i = 0; i < cloudData.cartData.length; i++) {
+            const item = cloudData.cartData[i];
             oldCartMap.set(item.name, { purchased: item.purchased, price: item.price });
         }
         
@@ -683,6 +695,7 @@
                 
                 newCartItems.push({
                     name: itemName,
+                    // 核心修改：保持旧的购买状态和价格，实现跨设备记忆
                     purchased: existingItem ? existingItem.purchased : false,
                     price: existingItem ? existingItem.price : ''
                 });
@@ -690,14 +703,15 @@
             }
         }
         
-        cartItems = newCartItems;
-
+        cloudData.cartData = newCartItems; // 更新云端购物车数据
+        
         if (selectedCount === 0) {
             alert("请先勾选您要采购的商品！");
             return;
         }
-
-        saveCart();
+        
+        await saveProductsToCloud(); // 保存到云端
+        
         renderCart();
         
         openTab(null, 'cart-tab');
@@ -715,8 +729,8 @@
         }
         
         // 1. 检查重复项
-        for (const category in procurementListTemplate) {
-            if (procurementListTemplate[category].includes(itemName)) {
+        for (const category in cloudData.productTemplate) {
+            if (cloudData.productTemplate[category].includes(itemName)) {
                  alert(`"${itemName}" 已经在清单中！`);
                  DOM.newProductInput.value = ''; 
                  DOM.newProductInput.focus();
@@ -729,9 +743,9 @@
         const targetCategoryKey = smartCategoryKey || selectedCategoryKey;
         
         // 确保目标分类存在
-        if (procurementListTemplate[targetCategoryKey]) {
+        if (cloudData.productTemplate[targetCategoryKey]) {
              // 3. 添加到目标分类
-             procurementListTemplate[targetCategoryKey].push(itemName);
+             cloudData.productTemplate[targetCategoryKey].push(itemName);
              
              // 4. 立即排序该分类
              sortCategory(targetCategoryKey); 
@@ -758,6 +772,9 @@
     function renderCart() {
         let tableHtml = '';
         
+        // 核心修改：使用云端购物车数据
+        const cartItems = cloudData.cartData; 
+
         if (cartItems.length === 0) {
             tableHtml = `<tr><td colspan="3" style="text-align: center; padding: 20px; color:#8e8e93;">购物车是空的，请在选品清单中勾选！</td></tr>`;
         } else {
@@ -802,8 +819,9 @@
         }
     }
 
-    function updateItemPrice(index, inputElement) {
+    async function updateItemPrice(index, inputElement) {
         const rawValue = parseFormattedPrice(inputElement.value);
+        const cartItems = cloudData.cartData;
 
         cartItems[index].price = rawValue; 
         
@@ -812,22 +830,28 @@
         
         inputElement.value = formatPrice(rawValue);
 
-        saveCart();
+        await saveProductsToCloud(); // 核心修改：保存到云端
         renderCart(); 
     }
 
-    function togglePurchased(index) {
+    async function togglePurchased(index) {
+        const cartItems = cloudData.cartData;
+        
         cartItems[index].purchased = !cartItems[index].purchased;
         if (!cartItems[index].purchased) {
             cartItems[index].price = '';
         }
-        saveCart();
+        
+        await saveProductsToCloud(); // 核心修改：保存到云端
+        
         calculateTotalCost(); 
         renderCart(); 
     }
 
     function calculateTotalCost() {
         let total = 0;
+        const cartItems = cloudData.cartData;
+        
         for (let i = 0; i < cartItems.length; i++) {
             const item = cartItems[i];
             const price = parseFloat(item.price);
@@ -849,6 +873,7 @@
 
         let summaryText = `📅 ${todayDate} 采购总结:\n\n`; 
         let hasPurchasedItems = false;
+        const cartItems = cloudData.cartData;
         
         for (let i = 0; i < cartItems.length; i++) {
             const item = cartItems[i];
@@ -887,50 +912,22 @@
         }
     }
 
-    function resetCart() {
+    async function resetCart() {
         if (confirm("确定要清空购物车并重置价格吗？这会清除所有当前记录！")) {
-            cartItems = [];
-            saveCart();
+            cloudData.cartData = [];
+            
+            await saveProductsToCloud(); // 核心修改：保存到云端
+            
             renderCart();
             
             openTab(null, 'product-tab');
+            // 清除选品页的勾选状态 (因为它们是根据购物车状态来记忆的，现在购物车是空的，所以理论上无需额外操作)
             document.querySelectorAll('#product-list input[type="checkbox"]').forEach(cb => cb.checked = false);
             alert("购物车已清空，请重新选购！");
         }
     }
-
-    // --- 本地存储 (Local Storage) (仅用于购物车) ---
     
-    function saveCart() {
-        const cartToSave = [];
-        for (let i = 0; i < cartItems.length; i++) {
-            const item = cartItems[i];
-            cartToSave.push({
-                 ...item,
-                 price: parseFormattedPrice(item.price) 
-            });
-        }
-        localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartToSave));
-    }
-
-    function loadCart() {
-        const savedCart = localStorage.getItem(CART_STORAGE_KEY);
-        if (savedCart) {
-            try {
-                const loadedCart = JSON.parse(savedCart);
-                cartItems = [];
-                for (let i = 0; i < loadedCart.length; i++) {
-                    const item = loadedCart[i];
-                    cartItems.push({
-                         ...item,
-                         price: parseFormattedPrice(item.price)
-                    });
-                }
-            } catch(e) {
-                console.error("加载购物车数据失败:", e);
-            }
-        }
-    }
+    // 移除本地存储函数 loadCart/saveCart，因为数据现在都在云端管理
 </script>
 </body>
 </html>

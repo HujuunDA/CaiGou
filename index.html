@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高级采购管理 (Ks) - 极速版</title>
+    <style>
+        /* 1. 全局和字体设置 (Clear and Minimal) */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            margin: 0;
+            background-color: #f7f7f7; /* 浅灰色背景 */
+            color: #1c1c1e; /* 深色文字 */
+        }
+        .container {
+            max-width: 900px;
+            margin: 30px auto;
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 16px; /* 柔和的圆角 */
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); /* 极轻微的阴影 */
+            transition: box-shadow 0.3s;
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #3a3a3c;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        
+        /* 2. Tab 切换样式 (Segmented Control Style) */
+        .tabs {
+            display: flex;
+            background-color: #f0f0f0; 
+            border-radius: 10px;
+            padding: 4px;
+            margin-bottom: 30px;
+        }
+        .tab-button {
+            flex-grow: 1;
+            padding: 10px 15px;
+            border: none;
+            background: none;
+            font-size: 15px;
+            font-weight: 600;
+            color: #8e8e93; 
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
+        }
+        .tab-button.active {
+            background-color: #ffffff; 
+            color: #1c1c1e; 
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); 
+        }
+        .tab-content {
+            display: none;
+            padding: 10px 0;
+        }
+        .tab-content.active {
+            display: block;
+        }
+
+        /* 3. 下单页面 (选品) 样式 */
+        #product-list h2 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #5856d6; 
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e5e5ea;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+        .product-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+            position: relative; 
+        }
+        .product-item input[type="checkbox"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid #c7c7cc;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        .product-item input[type="checkbox"]:checked {
+            background-color: #007aff; 
+            border-color: #007aff;
+        }
+        .product-item input[type="checkbox"]:checked::before {
+            content: '✓';
+            color: white;
+            font-size: 14px;
+            line-height: 18px;
+            text-align: center;
+            display: block;
+        }
+        .product-item label {
+            display: flex;
+            align-items: center;
+            flex-grow: 1;
+            font-size: 16px;
+            color: #1c1c1e;
+        }
+        
+        /* 编辑/删除按钮容器 */
+        .product-actions {
+            margin-left: 15px;
+            display: flex;
+            gap: 5px;
+        }
+
+        .action-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px;
+            font-size: 16px;
+            color: #8e8e93; 
+            transition: color 0.1s;
+        }
+        .action-button:hover {
+            color: #5856d6;
+        }
+        .delete-button:hover {
+            color: #ff3b30;
+        }
+
+        /* 结算和新增控件 */
+        .checkout-bar {
+            text-align: center;
+            margin-top: 40px;
+        }
+        .checkout-bar button {
+            background-color: #34c759; 
+            color: white;
+            border: none;
+            padding: 14px 40px;
+            font-size: 17px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(52, 199, 89, 0.3);
+            transition: background-color 0.2s, box-shadow 0.2s;
+        }
+        .checkout-bar button:active {
+            background-color: #2eaf4c;
+            box-shadow: none;
+        }
+        
+        .add-new-control {
+            display: flex; 
+            gap: 8px; 
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #f2f2f7; 
+            border-radius: 12px;
+            align-items: center;
+        }
+        .add-new-control input, .add-new-control select {
+            padding: 10px;
+            border: 1px solid #d1d1d6;
+            border-radius: 8px;
+            font-size: 15px;
+            box-sizing: border-box;
+            background-color: #ffffff; 
+        }
+        .add-new-control input {
+            flex-grow: 1;
+            -webkit-appearance: none; 
+            appearance: none;
+            min-width: 150px; 
+        }
+        .add-new-control select {
+            width: 160px; 
+            flex-shrink: 0;
+            text-overflow: ellipsis; 
+        }
+        .add-new-control button {
+            width: 120px; 
+            background-color: #007aff; 
+            color: white;
+            border: none;
+            padding: 10px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            flex-shrink: 0;
+            font-weight: 600;
+        }
+
+        /* 4. 购物车/结算页面样式 (同上) */
+        #cart-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 15px;
+        }
+        #cart-table th, #cart-table td {
+            padding: 12px 0;
+            border-bottom: 1px solid #e5e5ea;
+            text-align: left;
+        }
+        #cart-table th {
+            font-weight: 600;
+            color: #8e8e93;
+            background: none; 
+            border-bottom: 2px solid #d1d1d6;
+        }
+        
+        .cart-item-row.purchased td {
+            color: #aeaeb2; 
+            background-color: transparent;
+        }
+        .cart-item-row.purchased .item-name {
+            text-decoration: line-through;
+        }
+
+        .price-input {
+            width: 130px; 
+            padding: 6px 8px;
+            border: 1px solid #d1d1d6;
+            border-radius: 6px;
+            text-align: right;
+            font-size: 15px;
+            background-color: #f9f9f9; 
+            -webkit-appearance: none; 
+            appearance: none;
+        }
+        
+        /* 总计显示 (Card Style) */
+        #cart-total-display {
+            font-size: 20px;
+            font-weight: 700;
+            margin-top: 30px;
+            padding: 15px 20px;
+            background-color: #e5e5ea; 
+            border-radius: 12px;
+            color: #3a3a3c;
+            text-align: right;
+            border: none;
+        }
+        
+        /* 拷贝按钮样式 */
+        .copy-button {
+            width: 100%;
+            background-color: #007aff; 
+            color: white;
+            border: none;
+            padding: 14px 0;
+            font-size: 17px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 122, 255, 0.3);
+            margin-top: 20px;
+            margin-bottom: 10px;
+            transition: background-color 0.2s, box-shadow 0.2s;
+        }
+        .copy-button:active {
+            background-color: #005bb5;
+            box-shadow: none;
+        }
+
+        /* 红色按钮 (Destructive Action) */
+        .reset-button {
+            background-color: #ff3b30; 
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-weight: 600;
+            box-shadow: 0 2px 6px rgba(255, 59, 48, 0.3);
+            transition: background-color 0.2s, box-shadow 0.2s;
+        }
+        .reset-button:active {
+            background-color: #d82b2b;
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🛒 采购清单</h1>
+
+    <div class="tabs" id="tab-controls">
+        <button class="tab-button active" data-tab="product-tab" onclick="openTab(event, 'product-tab')">🛍️ 选品清单</button>
+        <button class="tab-button" data-tab="cart-tab" onclick="openTab(event, 'cart-tab')">📋 结算购物车</button>
+    </div>
+
+    <div id="product-tab" class="tab-content active">
+        <div id="product-list">
+            </div>
+        
+        <div class="checkout-bar">
+            <button onclick="addSelectedToCart()">✅ 加入购物车并前往结算</button>
+        </div>
+        
+        <div class="add-new-control">
+            <input type="text" id="new-product-input" placeholder="添加新的采购项到清单"> 
+            <select id="new-product-category">
+                </select>
+            <button class="add-to-list-button" onclick="addNewProductToList()">添加到清单</button>
+        </div>
+    </div>
+
+    <div id="cart-tab" class="tab-content">
+        <table id="cart-table">
+            <thead>
+                <tr>
+                    <th style="width: 5%;">✓</th>
+                    <th style="width: 65%;">采购品项</th>
+                    <th style="width: 30%; text-align: right;">价格</th>
+                </tr>
+            </thead>
+            <tbody id="cart-table-body">
+                </tbody>
+        </table>
+
+        <div id="cart-total-display">
+            总支出: Ks 0
+        </div>
+        
+        <button class="copy-button" onclick="copyCartSummary()">📋 拷贝采购清单与总支出</button>
+
+        <button class="reset-button" onclick="resetCart()">清空购物车 & 重置价格</button>
+    </div>
+</div>
+
+<script>
+    // --- 性能优化：缓存 DOM 引用 ---
+    const DOM = {
+        productList: document.getElementById('product-list'),
+        newProductCategory: document.getElementById('new-product-category'),
+        newProductInput: document.getElementById('new-product-input'),
+        cartTableBody: document.getElementById('cart-table-body'),
+        cartTotalDisplay: document.getElementById('cart-total-display'),
+    };
+
+    // --- 货币符号常量 ---
+    const CURRENCY_SYMBOL = 'Ks'; 
+    const CURRENCY_SUFFIX = ` ${CURRENCY_SYMBOL}`; 
+    
+    // 使用 Intl.NumberFormat 实现千位分隔符格式化 (不带小数)
+    const formatter = new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 0, 
+        maximumFractionDigits: 0
+    });
+    
+    // --- 初始数据模板 ---
+    let procurementListTemplate = {
+        '肉类/海鲜 🦞🥩': [
+            '鸡肉', '鸡肉香肠', '鸡翅膀', '鸡脚', '鸡胗', '鸡肠子', '牛肉', 
+            '羊肉', '猪排骨', '猪皮子', '猪肉', '五花肉', '香肠大号', 
+            '鱼', '虾子', '生蚝', '鹌鹑蛋', '牛油'
+        ],
+        '蔬菜 🥬': [
+            '秋葵', '茄子', '韭菜', '金针菇', '玉米', '土豆', '粑粑', '阿达度'
+        ],
+        '调料/酱料 🧂🧄': [
+            '葱叶', '味事达', '腌菜膏', '辣子', '大蒜', '鱼青菜根', '烟子', 
+            '盐碎', '姜', '麻将包'
+        ],
+        '耗材/其他': [
+            '烧烤签', '筷子', '打包带小号', '保鲜膜', '火炭'
+        ]
+    };
+
+    /**
+     * 智能分类关键字映射
+     */
+    const KEYWORD_MAP = {
+        // 肉类/海鲜 🦞🥩
+        '鸡': '肉类/海鲜 🦞🥩', '牛': '肉类/海鲜 🦞🥩', '猪': '肉类/海鲜 🦞🥩',
+        '羊': '肉类/海鲜 🦞🥩', '鱼': '肉类/海鲜 🦞🥩', '虾': '肉类/海鲜 🦞🥩',
+        '海鲜': '肉类/海鲜 🦞🥩', '肉': '肉类/海鲜 🦞🥩',
+        // 蔬菜 🥬
+        '菜': '蔬菜 🥬', '菇': '蔬菜 🥬', '果': '蔬菜 🥬', '豆': '蔬菜 🥬', '椒': '蔬菜 🥬',
+        // 调料/酱料 🧂🧄
+        '料': '调料/酱料 🧂🧄', '酱': '调料/酱料 🧂🧄', '醋': '调料/酱料 🧂🧄',
+        '油': '调料/酱料 🧂🧄', '葱': '调料/酱料 🧂🧄', '蒜': '调料/酱料 🧂🧄',
+        '盐': '调料/酱料 🧂🧄', '姜': '调料/酱料 🧂🧄',
+    };
+
+    // --- 核心变量和本地存储键 ---
+    let cartItems = []; 
+    const PRODUCT_STORAGE_KEY = 'bbqProducts'; 
+    const CART_STORAGE_KEY = 'bbqCart';      
+    let grandTotalCost = 0; 
+
+    // --- 实用工具函数 ---
+
+    function parseFormattedPrice(formattedString) {
+        if (!formattedString) return '';
+        const cleanedString = String(formattedString).replace(/[^0-9]/g, '');
+        return parseFloat(cleanedString) || '';
+    }
+
+    function formatPrice(number) {
+        const num = parseFloat(number);
+        if (isNaN(num) || num === 0) return '';
+        return formatter.format(num) + CURRENCY_SUFFIX;
+    }
+    
+    function getCategoryByKeyword(itemName) {
+        for (const keyword in KEYWORD_MAP) {
+            if (itemName.includes(keyword)) {
+                return KEYWORD_MAP[keyword];
+            }
+        }
+        return null; 
+    }
+
+    function sortCategory(categoryKey) {
+        if (procurementListTemplate[categoryKey]) {
+            procurementListTemplate[categoryKey].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+        }
+    }
+
+    // --- 初始化和加载 ---
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // 第一次加载时对所有现有数据进行排序
+        for (const category in procurementListTemplate) {
+            sortCategory(category);
+        }
+        loadProducts(); 
+        loadCart();     
+        renderCart();   
+        populateCategorySelect(); 
+        openTab(null, 'product-tab'); 
+    });
+
+    function populateCategorySelect() {
+        let optionsHtml = '';
+        for (const category in procurementListTemplate) {
+            optionsHtml += `<option value="${category}">${category}</option>`;
+        }
+        DOM.newProductCategory.innerHTML = optionsHtml;
+        if (DOM.newProductCategory.options.length > 0) {
+            DOM.newProductCategory.selectedIndex = 0;
+        }
+    }
+
+    function openTab(evt, tabName) {
+        let tabcontent = document.getElementsByClassName("tab-content");
+        for (let i = 0; i < tabcontent.length; i++) {
+            tabcontent[i].classList.remove("active");
+            tabcontent[i].style.display = "none";
+        }
+        
+        let tablinks = document.getElementsByClassName("tab-button");
+        for (let i = 0; i < tablinks.length; i++) {
+            tablinks[i].classList.remove("active");
+        }
+        
+        document.getElementById(tabName).classList.add("active");
+        document.getElementById(tabName).style.display = "block";
+        if (evt) {
+            evt.currentTarget.classList.add("active");
+        } else {
+            document.querySelector(`.tab-button[data-tab="${tabName}"]`).classList.add("active");
+        }
+    }
+    
+    // --- 1. 下单页面逻辑 (选品) - **性能优化核心** ---
+
+    function renderProductList() {
+        let listHtml = '';
+        
+        for (const category in procurementListTemplate) {
+            sortCategory(category); 
+            
+            listHtml += `<h2>${category}</h2>`;
+
+            const items = procurementListTemplate[category];
+            // 使用原生 for 循环进行微性能优化
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                const uniqueId = `${category}-${item}`;
+                
+                // 确保特殊字符被正确处理，防止 XSS 和参数错误
+                const escapedCategory = category.replace(/'/g, "\\'");
+                const escapedItem = item.replace(/'/g, "\\'");
+
+                listHtml += `
+                    <div class="product-item">
+                        <input type="checkbox" id="item-${uniqueId}" data-item-name="${item}">
+                        <label for="item-${uniqueId}" style="flex-grow:1; cursor:pointer;">${item}</label>
+                        <div class="product-actions">
+                            <button class="action-button edit-button" 
+                                    onclick="editProduct('${escapedCategory}', '${escapedItem}')">
+                                ✏️
+                            </button>
+                            <button class="action-button delete-button" 
+                                    onclick="deleteProduct('${escapedCategory}', '${escapedItem}')">
+                                🗑️
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        // 核心优化：一次性设置 innerHTML，减少 DOM 操作次数
+        DOM.productList.innerHTML = listHtml;
+    }
+    
+    function editProduct(category, oldName) {
+        const newName = prompt(`请输入 "${oldName}" 的新名称：`, oldName);
+        
+        if (newName && newName.trim() !== oldName) {
+            const trimmedNewName = newName.trim();
+            
+            // 检查重复项
+            let isDuplicate = false;
+            for (const cat in procurementListTemplate) {
+                if (procurementListTemplate[cat].includes(trimmedNewName)) {
+                    isDuplicate = true;
+                    break;
+                }
+            }
+
+            if (isDuplicate) {
+                alert(`"${trimmedNewName}" 已经在清单中，请使用其他名称！`);
+                return;
+            }
+            
+            // 1. 更新采购清单模板
+            const list = procurementListTemplate[category];
+            const oldIndex = list.indexOf(oldName);
+            
+            if (oldIndex !== -1) {
+                list[oldIndex] = trimmedNewName;
+                sortCategory(category);
+                saveProducts();
+                
+                // 2. 更新购物车中的名称
+                for (let i = 0; i < cartItems.length; i++) {
+                    if (cartItems[i].name === oldName) {
+                        cartItems[i].name = trimmedNewName;
+                        break; // 假设商品名是唯一的
+                    }
+                }
+                saveCart();
+                
+                // 3. 重新渲染
+                renderProductList();
+                renderCart();
+            }
+        }
+    }
+    
+    function deleteProduct(category, name) {
+        if (confirm(`确定要从清单中删除采购项 "${name}" 吗？此操作将无法撤销。`)) {
+            // 1. 从采购清单模板中删除
+            const list = procurementListTemplate[category];
+            const oldIndex = list.indexOf(name);
+            
+            if (oldIndex !== -1) {
+                list.splice(oldIndex, 1);
+                saveProducts();
+                
+                // 2. 从购物车中删除
+                cartItems = cartItems.filter(item => item.name !== name);
+                saveCart();
+                
+                // 3. 重新渲染
+                renderProductList();
+                renderCart();
+            }
+        }
+    }
+
+    function addSelectedToCart() {
+        const checkboxes = document.querySelectorAll('#product-list input[type="checkbox"]');
+        let selectedCount = 0;
+        
+        // 快速创建旧购物车项目的映射，以保留价格/状态
+        const oldCartMap = new Map();
+        for (let i = 0; i < cartItems.length; i++) {
+            const item = cartItems[i];
+            oldCartMap.set(item.name, { purchased: item.purchased, price: item.price });
+        }
+        
+        const newCartItems = [];
+
+        for (let i = 0; i < checkboxes.length; i++) {
+            const checkbox = checkboxes[i];
+            if (checkbox.checked) {
+                const itemName = checkbox.getAttribute('data-item-name');
+                const existingItem = oldCartMap.get(itemName);
+                
+                newCartItems.push({
+                    name: itemName,
+                    purchased: existingItem ? existingItem.purchased : false,
+                    price: existingItem ? existingItem.price : ''
+                });
+                selectedCount++;
+            }
+        }
+        
+        cartItems = newCartItems;
+
+        if (selectedCount === 0) {
+            alert("请先勾选您要采购的商品！");
+            return;
+        }
+
+        saveCart();
+        renderCart();
+        
+        openTab(null, 'cart-tab');
+        alert(`成功添加 ${selectedCount} 件商品到购物车，请在结算页记录价格！`);
+    }
+
+    function addNewProductToList() {
+        const itemName = DOM.newProductInput.value.trim();
+        const selectedCategoryKey = DOM.newProductCategory.value;
+
+        if (itemName === "") {
+            alert("请输入采购项名称。");
+            return;
+        }
+        
+        // 1. 检查重复项
+        for (const category in procurementListTemplate) {
+            if (procurementListTemplate[category].includes(itemName)) {
+                 alert(`"${itemName}" 已经在清单中！`);
+                 DOM.newProductInput.value = ''; 
+                 DOM.newProductInput.focus();
+                 return;
+            }
+        }
+
+        // 2. 确定目标分类：智能匹配优先，其次是用户选择
+        const smartCategoryKey = getCategoryByKeyword(itemName);
+        const targetCategoryKey = smartCategoryKey || selectedCategoryKey;
+        
+        if (procurementListTemplate[targetCategoryKey]) {
+             // 3. 添加到目标分类
+             procurementListTemplate[targetCategoryKey].push(itemName);
+             
+             // 4. 立即排序该分类
+             sortCategory(targetCategoryKey); 
+             
+             saveProducts();
+             renderProductList(); 
+             
+             // 5. 自动勾选新添加的项（注意：这涉及到 DOM 查询，无法完全避免）
+             const newCheckbox = document.querySelector(`input[data-item-name="${itemName}"]`);
+             if (newCheckbox) newCheckbox.checked = true;
+        } else {
+            alert("错误：无法找到目标分类。");
+        }
+        
+        DOM.newProductInput.value = ''; 
+        DOM.newProductInput.focus();
+    }
+
+
+    // --- 2. 购物车逻辑 (结算和价格记录) - **性能优化核心** ---
+    
+    function renderCart() {
+        let tableHtml = '';
+        
+        if (cartItems.length === 0) {
+            tableHtml = `<tr><td colspan="3" style="text-align: center; padding: 20px; color:#8e8e93;">购物车是空的，请在选品清单中勾选！</td></tr>`;
+        } else {
+            for (let index = 0; index < cartItems.length; index++) {
+                const item = cartItems[index];
+                const purchasedClass = item.purchased ? 'purchased' : '';
+                const checkedAttr = item.purchased ? 'checked' : '';
+                const formattedPrice = formatPrice(item.price);
+
+                tableHtml += `
+                    <tr class="cart-item-row ${purchasedClass}">
+                        <td>
+                            <input type="checkbox" ${checkedAttr} onchange="togglePurchased(${index})">
+                        </td>
+                        <td><span class="item-name">${item.name}</span></td>
+                        <td style="text-align: right;">
+                            <input type="text" 
+                                class="price-input" 
+                                value="${formattedPrice}" 
+                                placeholder="0 ${CURRENCY_SYMBOL}" 
+                                inputmode="numeric" 
+                                pattern="[0-9]*"
+                                onfocus="this.value = parseFormattedPrice(this.value);"
+                                onblur="updateItemPrice(${index}, this);"
+                                onkeyup="formatInput(this)">
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+        // 核心优化：一次性设置 innerHTML，减少 DOM 操作次数
+        DOM.cartTableBody.innerHTML = tableHtml;
+        
+        calculateTotalCost();
+    }
+    
+    function formatInput(inputElement) {
+        let value = inputElement.value.replace(/[^0-9]/g, '');
+        const number = parseFloat(value);
+        if (isNaN(number)) {
+            inputElement.value = '';
+        } else {
+            inputElement.value = formatter.format(number) + CURRENCY_SUFFIX;
+        }
+    }
+
+
+    function updateItemPrice(index, inputElement) {
+        // 强制使用 inputElement.value 获取当前输入框中的值
+        const rawValue = parseFormattedPrice(inputElement.value);
+
+        cartItems[index].price = rawValue; 
+        
+        // 自动打勾
+        const isPurchased = (rawValue !== '' && rawValue > 0);
+        cartItems[index].purchased = isPurchased;
+        
+        // 立即更新 input 的显示值
+        inputElement.value = formatPrice(rawValue);
+
+        saveCart();
+        // 仅在状态改变时重绘以减少重绘范围（但为简单起见，这里保持全量重绘）
+        renderCart(); 
+    }
+
+
+    function togglePurchased(index) {
+        cartItems[index].purchased = !cartItems[index].purchased;
+        if (!cartItems[index].purchased) {
+            cartItems[index].price = '';
+        }
+        saveCart();
+        calculateTotalCost(); 
+        renderCart(); 
+    }
+
+
+    function calculateTotalCost() {
+        let total = 0;
+        // 使用原生 for 循环进行微性能优化
+        for (let i = 0; i < cartItems.length; i++) {
+            const item = cartItems[i];
+            const price = parseFloat(item.price);
+            if (item.purchased && !isNaN(price) && price > 0) {
+                 total += price;
+            }
+        }
+        
+        grandTotalCost = total; 
+        
+        // 核心优化：缓存 DOM 引用，减少 DOM 查询
+        DOM.cartTotalDisplay.textContent = `总支出: ${formatter.format(grandTotalCost)}${CURRENCY_SUFFIX}`;
+    }
+    
+    async function copyCartSummary() {
+        // 获取当前日期并格式化为 YYYY-MM-DD
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const todayDate = `${year}-${month}-${day}`;
+
+        let summaryText = `📅 ${todayDate} 采购总结:\n\n`; 
+        let hasPurchasedItems = false;
+        
+        // 使用原生 for 循环进行微性能优化
+        for (let i = 0; i < cartItems.length; i++) {
+            const item = cartItems[i];
+            const price = parseFormattedPrice(item.price);
+            if (item.purchased && price !== '' && price > 0) {
+                hasPurchasedItems = true;
+                const formattedPrice = formatPrice(price);
+                summaryText += `${item.name}: ${formattedPrice}\n`;
+            }
+        }
+        
+        if (!hasPurchasedItems) {
+            alert("请先在清单中勾选已采购项目并填写价格！");
+            return;
+        }
+
+        summaryText += "\n------------------\n";
+        summaryText += `💰 总支出: ${formatter.format(grandTotalCost)}${CURRENCY_SUFFIX}`;
+        
+        try {
+            if (navigator.clipboard) {
+                await navigator.clipboard.writeText(summaryText);
+                alert("🛒 采购清单 (含日期) 已成功复制到剪贴板！\n您可以去粘贴给其他人了。");
+            } else {
+                // 兼容旧浏览器的复制方法
+                const textarea = document.createElement('textarea');
+                textarea.value = summaryText;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                alert("🛒 采购清单 (含日期) 已成功复制到剪贴板！\n您可以去粘贴给其他人了。");
+            }
+        } catch (err) {
+            console.error('无法复制内容:', err);
+            alert('复制失败，请手动复制以下内容:\n\n' + summaryText);
+        }
+    }
+
+
+    function resetCart() {
+        if (confirm("确定要清空购物车并重置价格吗？这会清除所有当前记录！")) {
+            cartItems = [];
+            saveCart();
+            renderCart();
+            
+            openTab(null, 'product-tab');
+            // DOM 查询无法避免，但仍是必要操作
+            document.querySelectorAll('#product-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+            alert("购物车已清空，请重新选购！");
+        }
+    }
+
+    // --- 本地存储 (Local Storage) ---
+    
+    function saveProducts() {
+         localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(procurementListTemplate));
+    }
+
+    function loadProducts() {
+        const savedProducts = localStorage.getItem(PRODUCT_STORAGE_KEY);
+        if (savedProducts) {
+             try {
+                procurementListTemplate = JSON.parse(savedProducts);
+             } catch(e) {
+                 console.error("加载产品数据失败:", e);
+             }
+        }
+        renderProductList();
+    }
+
+    function saveCart() {
+        const cartToSave = [];
+        // 使用原生 for 循环进行微性能优化
+        for (let i = 0; i < cartItems.length; i++) {
+            const item = cartItems[i];
+            cartToSave.push({
+                 ...item,
+                 price: parseFormattedPrice(item.price) 
+            });
+        }
+        localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartToSave));
+    }
+
+    function loadCart() {
+        const savedCart = localStorage.getItem(CART_STORAGE_KEY);
+        if (savedCart) {
+            try {
+                const loadedCart = JSON.parse(savedCart);
+                cartItems = [];
+                // 使用原生 for 循环进行微性能优化
+                for (let i = 0; i < loadedCart.length; i++) {
+                    const item = loadedCart[i];
+                    cartItems.push({
+                         ...item,
+                         price: parseFormattedPrice(item.price)
+                    });
+                }
+            } catch(e) {
+                console.error("加载购物车数据失败:", e);
+            }
+        }
+    }
+</script>
+</body>
+</html>

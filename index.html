@@ -407,7 +407,7 @@
         '盐': '调料/酱料 🧂🧄', '姜': '调料/酱料 🧂🧄',
     };
 
-    // --- 云同步函数 (更新) ---
+    // --- 云同步函数 ---
     
     /**
      * 从 JSONBin 加载采购清单和购物车数据
@@ -433,12 +433,12 @@
 
             const json = await response.json();
             
-            // 核心修改：检查新的双重结构
+            // 检查新的双重结构
             if (json && json.record && json.record.productTemplate && Array.isArray(json.record.cartData)) {
                 cloudData.productTemplate = json.record.productTemplate;
                 cloudData.cartData = json.record.cartData;
             } else if (json && json.record && typeof json.record === 'object') {
-                // 如果是旧的单层结构，尝试兼容，并提示用户需要更新JSONBin结构
+                // 如果是旧的单层结构，尝试兼容
                 cloudData.productTemplate = json.record;
                 cloudData.cartData = [];
                 console.warn('云端数据结构为旧版本，请在 JSONBin 中更新为包含 productTemplate 和 cartData 的新结构。');
@@ -456,7 +456,7 @@
             }
             renderProductList();
             populateCategorySelect();
-            renderCart(); // 新增：加载后立即渲染购物车
+            renderCart(); 
             
             // 隐藏加载层
             DOM.loadingOverlay.style.opacity = '0';
@@ -470,7 +470,7 @@
     async function saveProductsToCloud() {
         if (!JSONBIN_ID || !JSONBIN_MASTER_KEY) return;
         
-        // 核心修改：保存整个 cloudData 对象
+        // 保存整个 cloudData 对象
         const dataToSave = cloudData; 
 
         try {
@@ -525,10 +525,7 @@
     // --- 初始化和加载 ---
 
     document.addEventListener('DOMContentLoaded', () => {
-        // 只需要从云端加载一次
         loadProductsFromCloud(); 
-        
-        // 初始打开选品页面
         openTab(null, 'product-tab');
     });
 
@@ -560,14 +557,13 @@
         if (evt) {
             evt.currentTarget.classList.add("active");
         } else {
-            // 处理首次加载时 evt 为 null 的情况
             const initialTabButton = document.querySelector(`.tab-button[data-tab="${tabName}"]`);
             if (initialTabButton) initialTabButton.classList.add("active");
         }
         
-        // 核心修改：每次切换到购物车时，强制重新渲染一次，以保证数据同步
+        // 每次切换到购物车时，重新加载一次，确保数据最新
         if (tabName === 'cart-tab') {
-            loadProductsFromCloud(); // 重新加载云端数据
+            loadProductsFromCloud(); 
         }
     }
     
@@ -577,7 +573,6 @@
         let listHtml = '';
         
         for (const category in cloudData.productTemplate) {
-            // 性能优化：确保每次渲染前都排序
             sortCategory(category); 
             
             listHtml += `<h2>${category}</h2>`;
@@ -638,7 +633,6 @@
                 list[oldIndex] = trimmedNewName;
                 sortCategory(category);
                 
-                // 核心修改：同步更新购物车中的项目名称
                 for (let i = 0; i < cloudData.cartData.length; i++) {
                     if (cloudData.cartData[i].name === oldName) {
                         cloudData.cartData[i].name = trimmedNewName;
@@ -663,7 +657,6 @@
             if (oldIndex !== -1) {
                 list.splice(oldIndex, 1);
                 
-                // 核心修改：同步移除购物车中的项目
                 cloudData.cartData = cloudData.cartData.filter(item => item.name !== name);
                 
                 await saveProductsToCloud();
@@ -678,7 +671,6 @@
         const checkboxes = document.querySelectorAll('#product-list input[type="checkbox"]');
         let selectedCount = 0;
         
-        // 核心修改：使用云端数据作为旧购物车
         const oldCartMap = new Map();
         for (let i = 0; i < cloudData.cartData.length; i++) {
             const item = cloudData.cartData[i];
@@ -695,7 +687,6 @@
                 
                 newCartItems.push({
                     name: itemName,
-                    // 核心修改：保持旧的购买状态和价格，实现跨设备记忆
                     purchased: existingItem ? existingItem.purchased : false,
                     price: existingItem ? existingItem.price : ''
                 });
@@ -703,14 +694,14 @@
             }
         }
         
-        cloudData.cartData = newCartItems; // 更新云端购物车数据
+        cloudData.cartData = newCartItems; 
         
         if (selectedCount === 0) {
             alert("请先勾选您要采购的商品！");
             return;
         }
         
-        await saveProductsToCloud(); // 保存到云端
+        await saveProductsToCloud(); 
         
         renderCart();
         
@@ -750,7 +741,6 @@
              // 4. 立即排序该分类
              sortCategory(targetCategoryKey); 
              
-             // 核心修改：保存到云端
              await saveProductsToCloud();
              
              renderProductList(); 
@@ -772,7 +762,6 @@
     function renderCart() {
         let tableHtml = '';
         
-        // 核心修改：使用云端购物车数据
         const cartItems = cloudData.cartData; 
 
         if (cartItems.length === 0) {
@@ -798,8 +787,7 @@
                                 inputmode="numeric" 
                                 pattern="[0-9]*"
                                 onfocus="this.value = parseFormattedPrice(this.value);"
-                                onblur="updateItemPrice(${index}, this);"
-                                onkeyup="formatInput(this)">
+                                onblur="updateItemPrice(${index}, this.value, this)">
                         </td>
                     </tr>
                 `;
@@ -809,18 +797,9 @@
         calculateTotalCost();
     }
     
-    function formatInput(inputElement) {
-        let value = inputElement.value.replace(/[^0-9]/g, '');
-        const number = parseFloat(value);
-        if (isNaN(number)) {
-            inputElement.value = '';
-        } else {
-            inputElement.value = formatter.format(number) + CURRENCY_SUFFIX;
-        }
-    }
-
-    async function updateItemPrice(index, inputElement) {
-        const rawValue = parseFormattedPrice(inputElement.value);
+    // *** 修复后的函数：只处理同步和格式化，不再调用 renderCart() ***
+    async function updateItemPrice(index, rawValueString, inputElement) {
+        const rawValue = parseFormattedPrice(rawValueString);
         const cartItems = cloudData.cartData;
 
         cartItems[index].price = rawValue; 
@@ -828,24 +807,49 @@
         const isPurchased = (rawValue !== '' && rawValue > 0);
         cartItems[index].purchased = isPurchased;
         
+        // 立即格式化输入框显示的值
         inputElement.value = formatPrice(rawValue);
 
-        await saveProductsToCloud(); // 核心修改：保存到云端
-        renderCart(); 
+        // 更新总计
+        calculateTotalCost(); 
+        
+        // 标记并更新该行的样式
+        const row = inputElement.closest('.cart-item-row');
+        if (row) {
+            row.classList.toggle('purchased', isPurchased);
+            row.querySelector('input[type="checkbox"]').checked = isPurchased;
+        }
+
+        // 保存到云端
+        await saveProductsToCloud();
     }
 
+    // *** 修复后的函数：只处理同步和格式化，不再调用 renderCart() ***
     async function togglePurchased(index) {
         const cartItems = cloudData.cartData;
+        const currentCheckbox = event.target; // 获取触发事件的 Checkbox
+        const isChecked = currentCheckbox.checked;
         
-        cartItems[index].purchased = !cartItems[index].purchased;
-        if (!cartItems[index].purchased) {
+        cartItems[index].purchased = isChecked;
+
+        // 如果取消勾选，清除价格
+        if (!isChecked) {
             cartItems[index].price = '';
+            // 找到对应的价格输入框并更新其显示
+            const row = currentCheckbox.closest('.cart-item-row');
+            if (row) {
+                row.querySelector('.price-input').value = formatPrice('');
+            }
         }
         
-        await saveProductsToCloud(); // 核心修改：保存到云端
-        
+        // 更新总计
         calculateTotalCost(); 
-        renderCart(); 
+        
+        // 切换行样式
+        currentCheckbox.closest('.cart-item-row').classList.toggle('purchased', isChecked);
+
+        // 保存到云端
+        await saveProductsToCloud(); 
     }
 
     function calculateTotalCost() {
@@ -916,18 +920,15 @@
         if (confirm("确定要清空购物车并重置价格吗？这会清除所有当前记录！")) {
             cloudData.cartData = [];
             
-            await saveProductsToCloud(); // 核心修改：保存到云端
+            await saveProductsToCloud(); 
             
             renderCart();
             
             openTab(null, 'product-tab');
-            // 清除选品页的勾选状态 (因为它们是根据购物车状态来记忆的，现在购物车是空的，所以理论上无需额外操作)
             document.querySelectorAll('#product-list input[type="checkbox"]').forEach(cb => cb.checked = false);
             alert("购物车已清空，请重新选购！");
         }
     }
-    
-    // 移除本地存储函数 loadCart/saveCart，因为数据现在都在云端管理
 </script>
 </body>
 </html>

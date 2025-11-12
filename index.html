@@ -360,10 +360,10 @@
 
 <script>
     // *********************************************************************************
-    // *** 核心修改：云同步配置 - 请用您的 JSONBin Bin ID 和 Master Key 替换下面的值 ***
+    // *** 核心修改：云同步配置 - 已为您填入您的 Bin ID 和 Master Key ***
     // *********************************************************************************
-    const JSONBIN_ID = 'YOUR_JSONBIN_BIN_ID_HERE'; 
-    const JSONBIN_MASTER_KEY = 'YOUR_JSONBIN_MASTER_KEY_HERE'; 
+    const JSONBIN_ID = '6914d01eae596e708f552007'; 
+    const JSONBIN_MASTER_KEY = '$2a$10$IpDKTR7rokm3XA7rNEmLoeaqE9aZxj2Vu23VSYCVN7Hj5q8V1X25.'; 
     const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
     
     // --- 性能优化：缓存 DOM 引用 ---
@@ -412,11 +412,10 @@
      * 从 JSONBin 加载采购清单数据
      */
     async function loadProductsFromCloud() {
-        if (!JSONBIN_ID || JSONBIN_ID === 'YOUR_JSONBIN_BIN_ID_HERE' || !JSONBIN_MASTER_KEY || JSONBIN_MASTER_KEY === 'YOUR_JSONBIN_MASTER_KEY_HERE') {
-             // 如果未配置秘钥，使用备用空数据，并提示用户
+        if (!JSONBIN_ID || !JSONBIN_MASTER_KEY) {
+             // 理论上不应该运行，因为上面已经填入了 key
              procurementListTemplate = {};
-             DOM.loadingOverlay.textContent = "❗ 错误：请在代码中配置 JSONBIN_ID 和 Master Key。";
-             alert("警告：JSONBin 配置缺失，无法同步数据。请在 index.html 中填入您的 Bin ID 和 Master Key。");
+             DOM.loadingOverlay.textContent = "❗ 错误：配置信息丢失。";
              return;
         }
 
@@ -424,7 +423,6 @@
             const response = await fetch(JSONBIN_URL, {
                 method: 'GET',
                 headers: {
-                    // 读取数据时，只需要 Master Key
                     'X-Master-Key': JSONBIN_MASTER_KEY
                 }
             });
@@ -461,7 +459,7 @@
      * 将采购清单数据上传到 JSONBin
      */
     async function saveProductsToCloud() {
-        if (!JSONBIN_ID || JSONBIN_ID === 'YOUR_JSONBIN_BIN_ID_HERE' || !JSONBIN_MASTER_KEY || JSONBIN_MASTER_KEY === 'YOUR_JSONBIN_MASTER_KEY_HERE') return;
+        if (!JSONBIN_ID || !JSONBIN_MASTER_KEY) return;
         
         const dataToSave = procurementListTemplate;
 

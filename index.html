@@ -308,7 +308,7 @@
 <body>
 
 <div id="loading-overlay">
-    正在从云端加载采购清单... 🚀
+    加载采购清单... 🚀
 </div>
 
 <div class="container">
@@ -316,7 +316,7 @@
 
     <div class="tabs" id="tab-controls">
         <button class="tab-button active" data-tab="product-tab" onclick="openTab(event, 'product-tab')">🛍️ 选品清单</button>
-        <button class="tab-button" data-tab="cart-tab" onclick="openTab(event, 'cart-tab')">📋 结算购物车</button>
+        <button class="tab-button" data-tab="cart-tab" onclick="openTab(event, 'cart-tab')">📋 购物清单</button>
     </div>
 
     <div id="product-tab" class="tab-content active">
@@ -324,7 +324,7 @@
             </div>
         
         <div class="checkout-bar">
-            <button onclick="addSelectedToCart()">✅ 加入购物车并前往结算</button>
+            <button onclick="addSelectedToCart()">✅ 加入采购单</button>
         </div>
         
         <div class="add-new-control">

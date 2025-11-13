@@ -439,7 +439,6 @@
         }
     }
     
-    // *** 修复点 1：将此函数移到全局作用域 ***
     function populateCategorySelect() {
         let optionsHtml = '';
         for (const category in cloudData.productTemplate) {
@@ -464,13 +463,11 @@
             const response = await fetch(JSONBIN_URL, {
                 method: 'GET',
                 headers: {
-                    // 即使是 Public Bin，也建议带上 Master Key，提高访问可靠性
                     'X-Master-Key': JSONBIN_MASTER_KEY 
                 }
             });
 
             if (!response.ok) {
-                // 如果是 404，可能是 ID 错误。如果是 401/403，可能是 Master Key 错误。
                 throw new Error(`HTTP error! status: ${response.status}. 请检查 Bin ID 和 Master Key。`);
             }
 
@@ -490,15 +487,13 @@
             DOM.loadingOverlay.textContent = `❌ 加载失败，请检查配置或 Bin 权限。详情: ${error.message}`;
             alert("加载云端数据失败！请检查 JSONBin 配置是否正确。");
         } finally {
-            // *** 修复点 1：确保调用这些子函数时，它们在全局已定义 ***
             for (const category in cloudData.productTemplate) {
                 sortCategory(category);
             }
             renderProductList();
-            populateCategorySelect(); // <--- 修复后可以正常调用
+            populateCategorySelect(); 
             renderCart(); 
             
-            // 恢复 Tab 状态
             const savedTab = sessionStorage.getItem('activeTab') || 'product-tab';
             openTab(null, savedTab);
 
@@ -539,10 +534,8 @@
     });
 
     function openTab(evt, tabName) {
-        // 1. 记录当前 Tab 到 sessionStorage
         sessionStorage.setItem('activeTab', tabName);
         
-        // 2. Tab 切换样式和内容显示逻辑不变
         let tabcontent = document.getElementsByClassName("tab-content");
         for (let i = 0; i < tabcontent.length; i++) {
             tabcontent[i].classList.remove("active");
@@ -563,7 +556,6 @@
             if (initialTabButton) initialTabButton.classList.add("active");
         }
         
-        // 3. 每次切换到购物车时，重新加载一次，确保数据最新
         if (tabName === 'cart-tab') {
             loadProductsFromCloud(); 
         }
@@ -671,6 +663,7 @@
         }
     }
 
+    // *** 修复点：添加后自动取消勾选 ***
     async function addSelectedToCart() {
         const checkboxes = document.querySelectorAll('#product-list input[type="checkbox"]');
         let selectedCount = 0;
@@ -682,6 +675,7 @@
         
         const newCartItems = [];
         const selectedItemNames = new Set();
+        const checkedElements = []; // 新增：用于存储所有被勾选的 DOM 元素
 
         for (const checkbox of checkboxes) {
             const itemName = checkbox.getAttribute('data-item-name');
@@ -695,6 +689,7 @@
                 });
                 selectedItemNames.add(itemName);
                 selectedCount++;
+                checkedElements.push(checkbox); // 存储被勾选的元素
             }
         }
         
@@ -716,6 +711,15 @@
         
         renderCart();
         
+        // *** 新增逻辑：取消勾选选品清单中的项目 ***
+        for (const checkbox of checkedElements) {
+            checkbox.checked = false; 
+        }
+        // 由于 renderProductList() 会根据 cartData 重新判断勾选状态，
+        // 并且我们已将所有项目添加到 cartData，所以这里不需要重新渲染整个列表
+        // 但我们保留这行代码，以防未来逻辑变化：
+        // renderProductList(); 
+
         openTab(null, 'cart-tab');
         alert(`成功添加 ${selectedCount} 件商品到购物车，请在结算页记录价格！`);
     }
@@ -748,10 +752,19 @@
              
              await saveProductsToCloud();
              
+             // 重新渲染列表，确保新添加的项出现
              renderProductList(); 
              
+             // 自动勾选新添加的项，并将其加入购物车
              const newCheckbox = document.querySelector(`input[data-item-name="${itemName}"]`);
-             if (newCheckbox) newCheckbox.checked = true;
+             if (newCheckbox) {
+                 newCheckbox.checked = true;
+                 // 自动执行添加到购物车和取消勾选的流程
+                 await addSelectedToCart(); 
+             } else {
+                 // 如果没有自动勾选，至少保证数据已添加
+                 renderCart();
+             }
         } else {
             alert("错误：无法找到目标分类。");
         }

@@ -789,13 +789,12 @@
                         </td>
                         <td><span class="item-name">${item.name}</span></td>
                         <td style="text-align: right;">
-                            <input type="text" 
+                            <input type="number" 
                                 class="price-input" 
-                                value="${displayValue}" 
-                                placeholder="0 ${CURRENCY_SYMBOL}" 
+                                value="${item.price || ''}" 
+                                placeholder="0" 
                                 inputmode="numeric" 
                                 pattern="[0-9]*"
-                                onfocus="this.value = parseFormattedPrice(this.value);"
                                 onchange="updateItemPrice(${index}, this.value, this)">
                         </td>
                     </tr>
@@ -806,7 +805,7 @@
         calculateTotalCost();
     }
     
-    // *** 修复 V7 核心：采用 onchange 事件处理价格更新 ***
+    // *** 核心修复 V8：采用 onchange 事件处理价格更新 ***
     async function updateItemPrice(index, rawValueString, inputElement) {
         // 1. 解析输入值
         const rawValue = parseFormattedPrice(rawValueString);
@@ -819,8 +818,8 @@
         cartItems[index].price = rawValue; 
         cartItems[index].purchased = isPurchased;
         
-        // 4. 重新格式化并更新输入框显示（onchange 触发后执行，比 onblur 安全）
-        inputElement.value = formatPrice(rawValue);
+        // 4. 由于 type="number"，我们不需要在输入框中显示货币符号，它应该只显示纯数字
+        // 我们可以选择重新渲染购物车来显示格式化的总价，或者只更新总价。
 
         // 5. 更新行样式和复选框状态
         const row = inputElement.closest('.cart-item-row');
@@ -845,19 +844,13 @@
         if (!isChecked) {
             // 如果取消勾选，清除价格和输入框显示
             cartItems[index].price = '';
-            priceInput.value = formatPrice('');
+            priceInput.value = ''; // 清除纯数字输入框
         }
         
         calculateTotalCost(); 
         
         row.classList.toggle('purchased', isChecked);
         
-        // 如果用户在未输入价格时勾选，但价格仍为0，不应该自动保存，但我们在这里为了稳定，直接保存。
-        if (isChecked && cartItems[index].price === '') {
-             // 确保在勾选时，输入框显示的是纯数字（如果之前有的话）或空白，以便用户输入
-             priceInput.value = parseFormattedPrice(priceInput.value);
-        }
-
         await saveProductsToCloud(); 
     }
 

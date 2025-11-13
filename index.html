@@ -414,7 +414,6 @@
     // --- 实用工具函数 (保持不变) ---
     function parseFormattedPrice(formattedString) {
         if (!formattedString) return '';
-        // 移除所有非数字字符，但保留英文句号和逗号（如果需要小数）
         const cleanedString = String(formattedString).replace(/[^0-9.]/g, ''); 
         return parseFloat(cleanedString) || '';
     }
@@ -567,7 +566,6 @@
     function renderProductList() {
         let listHtml = '';
         
-        // 购物车中的项目名称集合
         const cartItemNames = new Set(cloudData.cartData.map(item => item.name));
         
         for (const category in cloudData.productTemplate) {
@@ -666,7 +664,6 @@
         }
     }
 
-    // *** 修复点 1：加入购物车并取消勾选 ***
     async function addSelectedToCart() {
         const checkboxes = document.querySelectorAll('#product-list input[type="checkbox"]');
         let selectedCount = 0;
@@ -684,7 +681,6 @@
             const existingItem = existingCartMap.get(itemName);
 
             if (checkbox.checked) {
-                // 如果勾选，则加入新购物车，并继承旧状态
                 newCartItems.push({
                     name: itemName,
                     purchased: existingItem ? existingItem.purchased : false,
@@ -693,7 +689,7 @@
                 selectedItemNames.add(itemName);
                 selectedCount++;
                 
-                // *** 核心修复：立即取消 DOM 上的勾选状态 ***
+                // 核心：立即取消 DOM 上的勾选状态
                 checkbox.checked = false;
             }
         }
@@ -757,8 +753,8 @@
                  newCheckbox.checked = true;
              }
              
-             // *** 修复点 1：移除冗余的 addSelectedToCart() 调用，避免双重操作和逻辑混乱 ***
-             // addSelectedToCart(); 
+             // 提醒用户点击“加入购物车”按钮
+             alert("新项目已添加到清单并勾选，请点击 '加入购物车并前往结算' 完成添加。");
              
         } else {
             alert("错误：无法找到目标分类。");
@@ -783,8 +779,11 @@
                 const item = cartItems[index];
                 const purchasedClass = item.purchased ? 'purchased' : '';
                 const checkedAttr = item.purchased ? 'checked' : '';
-                const formattedPrice = formatPrice(item.price);
-
+                
+                // *** 修复点 3：在渲染时，输入框直接显示纯数字或格式化后的价格 ***
+                // 手机输入时，显示纯数字 (如果非空)，否则显示格式化后的价格
+                const displayValue = item.price ? item.price : formatPrice(item.price);
+                
                 tableHtml += `
                     <tr class="cart-item-row ${purchasedClass}">
                         <td>
@@ -794,11 +793,11 @@
                         <td style="text-align: right;">
                             <input type="text" 
                                 class="price-input" 
-                                value="${formattedPrice}" 
+                                value="${displayValue}" 
                                 placeholder="0 ${CURRENCY_SYMBOL}" 
                                 inputmode="numeric" 
                                 pattern="[0-9]*"
-                                
+                                onfocus="this.value = parseFormattedPrice(this.value);"
                                 onblur="updateItemPrice(${index}, this.value, this)">
                         </td>
                     </tr>
@@ -809,32 +808,34 @@
         calculateTotalCost();
     }
     
-    // *** 修复点 2：价格更新逻辑，保持简洁和稳定 ***
+    // *** 修复点 4：价格更新逻辑 - 引入延迟格式化 ***
     async function updateItemPrice(index, rawValueString, inputElement) {
-        // 解析输入值
+        // 1. 解析输入值
         const rawValue = parseFormattedPrice(rawValueString);
         const cartItems = cloudData.cartData;
 
-        // 确定是否已采购 (价格大于0即认为已采购)
+        // 2. 确定是否已采购 (价格大于0即认为已采购)
         const isPurchased = (rawValue !== '' && rawValue > 0);
         
-        // 更新底层数据
+        // 3. 更新底层数据
         cartItems[index].price = rawValue; 
         cartItems[index].purchased = isPurchased;
         
-        // 重新格式化并更新输入框显示
-        inputElement.value = formatPrice(rawValue);
-
-        calculateTotalCost(); 
-        
-        // 更新行样式和复选框状态
+        // 4. 更新行样式和复选框状态（立即更新）
         const row = inputElement.closest('.cart-item-row');
         if (row) {
             row.classList.toggle('purchased', isPurchased);
             row.querySelector('input[type="checkbox"]').checked = isPurchased;
         }
 
+        // 5. 保存数据到云端（立即执行）
         await saveProductsToCloud();
+        
+        // 6. 延迟重新格式化输入框显示（核心修复）
+        setTimeout(() => {
+            inputElement.value = formatPrice(rawValue);
+            calculateTotalCost(); 
+        }, 150); // 延迟 150ms，给移动端输入法关闭留出时间
     }
 
     async function togglePurchased(index) {

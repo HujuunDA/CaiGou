@@ -367,10 +367,10 @@
 
 <script>
     // *********************************************************************************
-    // *** 核心配置信息 - 请确保您的 Master Key 匹配您在 JSONBin.io API Keys 页面上的 Primary Key ***
+    // *** 核心配置信息 - 【请将下面的占位符替换为您新账户的实际信息！】 ***
     // *********************************************************************************
-    const JSONBIN_ID = '6914d01eae596e708f552007'; // 您的 Public Bin ID
-    const JSONBIN_MASTER_KEY = '$2a$10$G2ttyXzQ4c41gE8veTSgAulGObfpRnEafJVX.sHKzGwJylDpekota'; // 请确保这是您的 Primary Master Key
+    const JSONBIN_ID = 'YOUR_NEW_BIN_ID_HERE'; // 👈 【重要】替换为您在新账号中创建的 Bin ID
+    const JSONBIN_MASTER_KEY = 'YOUR_NEW_MASTER_KEY_HERE'; // 👈 【重要】替换为您新账号的 Master Key
     const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
     
     // --- 性能优化：缓存 DOM 引用 ---
@@ -442,9 +442,16 @@
     
     function populateCategorySelect() {
         let optionsHtml = '';
-        for (const category in cloudData.productTemplate) {
-            optionsHtml += `<option value="${category}">${category}</option>`;
+        // 确保至少有一个默认分类，以防模板为空
+        if (Object.keys(cloudData.productTemplate).length === 0) {
+             optionsHtml += `<option value="默认分类">默认分类</option>`;
+             cloudData.productTemplate["默认分类"] = [];
+        } else {
+             for (const category in cloudData.productTemplate) {
+                 optionsHtml += `<option value="${category}">${category}</option>`;
+             }
         }
+        
         DOM.newProductCategory.innerHTML = optionsHtml;
         if (DOM.newProductCategory.options.length > 0) {
             DOM.newProductCategory.selectedIndex = 0;
@@ -454,10 +461,25 @@
     // --- 云同步函数 ---
     
     async function loadProductsFromCloud() {
-        if (!JSONBIN_ID || !JSONBIN_MASTER_KEY) {
-             cloudData = { productTemplate: {}, cartData: [] };
-             DOM.loadingOverlay.textContent = "❗ 错误：配置信息丢失。";
-             return;
+        if (!JSONBIN_ID || JSONBIN_ID === 'YOUR_NEW_BIN_ID_HERE' || !JSONBIN_MASTER_KEY || JSONBIN_MASTER_KEY === 'YOUR_NEW_MASTER_KEY_HERE') {
+             // 新账户配置未完成
+             cloudData = { productTemplate: {"默认分类": ["示例商品"]}, cartData: [] };
+             DOM.loadingOverlay.textContent = "❗ 错误：请先在代码中替换 YOUR_NEW_BIN_ID_HERE 和 YOUR_NEW_MASTER_KEY_HERE。";
+             
+             // 允许程序在本地显示模板
+             for (const category in cloudData.productTemplate) {
+                sortCategory(category);
+            }
+            renderProductList();
+            populateCategorySelect(); 
+            renderCart(); 
+            
+            const savedTab = sessionStorage.getItem('activeTab') || 'product-tab';
+            openTab(null, savedTab);
+
+            DOM.loadingOverlay.style.opacity = '0';
+            setTimeout(() => DOM.loadingOverlay.style.display = 'none', 300);
+            return;
         }
 
         try {
@@ -478,10 +500,18 @@
                 cloudData.productTemplate = json.record.productTemplate;
                 cloudData.cartData = json.record.cartData;
             } else if (json && json.record && typeof json.record === 'object') {
-                cloudData.productTemplate = json.record;
-                cloudData.cartData = [];
+                // Bin 首次创建时可能返回空对象，我们初始化数据结构
+                if (Object.keys(json.record).length === 0) {
+                     cloudData.productTemplate = {"默认分类": []};
+                     cloudData.cartData = [];
+                } else {
+                    cloudData.productTemplate = json.record;
+                    cloudData.cartData = [];
+                }
             } else {
-                throw new Error('云端数据格式不正确。');
+                // 如果云端数据为空，初始化一个默认结构
+                cloudData.productTemplate = {"默认分类": []};
+                cloudData.cartData = [];
             }
         } catch (error) {
             console.error('加载云端数据失败:', error);
@@ -504,7 +534,10 @@
     }
 
     async function saveProductsToCloud() {
-        if (!JSONBIN_ID || !JSONBIN_MASTER_KEY) return;
+        if (!JSONBIN_ID || JSONBIN_ID === 'YOUR_NEW_BIN_ID_HERE' || !JSONBIN_MASTER_KEY || JSONBIN_MASTER_KEY === 'YOUR_NEW_MASTER_KEY_HERE') {
+            alert("❗ 警告：请先完成代码中的 Master Key 和 Bin ID 替换，数据才能上传！");
+            return;
+        }
         
         const dataToSave = cloudData; 
 
@@ -738,27 +771,29 @@
         const smartCategoryKey = getCategoryByKeyword(itemName);
         const targetCategoryKey = smartCategoryKey || selectedCategoryKey;
         
-        if (cloudData.productTemplate[targetCategoryKey]) {
-             cloudData.productTemplate[targetCategoryKey].push(itemName);
-             
-             sortCategory(targetCategoryKey); 
-             
-             await saveProductsToCloud();
-             
-             renderProductList(); 
-             
-             // 自动勾选新添加的项
-             const newCheckbox = document.querySelector(`input[data-item-name="${itemName}"]`);
-             if (newCheckbox) {
-                 newCheckbox.checked = true;
-             }
-             
-             alert("新项目已添加到清单并勾选，请点击 '加入购物车并前往结算' 完成添加。");
-             
-        } else {
-            alert("错误：无法找到目标分类。");
+        // 如果目标分类不存在（例如，新 Bin 是空的）
+        if (!cloudData.productTemplate[targetCategoryKey]) {
+            cloudData.productTemplate[targetCategoryKey] = [];
         }
         
+        cloudData.productTemplate[targetCategoryKey].push(itemName);
+         
+        sortCategory(targetCategoryKey); 
+         
+        await saveProductsToCloud();
+         
+        renderProductList(); 
+         
+        // 自动勾选新添加的项
+        const newCheckbox = document.querySelector(`input[data-item-name="${itemName}"]`);
+        if (newCheckbox) {
+            newCheckbox.checked = true;
+        }
+        
+        populateCategorySelect(); // 更新分类下拉框
+        
+        alert("新项目已添加到清单并勾选，请点击 '加入购物车并前往结算' 完成添加。");
+             
         DOM.newProductInput.value = ''; 
         DOM.newProductInput.focus();
     }
@@ -818,10 +853,7 @@
         cartItems[index].price = rawValue; 
         cartItems[index].purchased = isPurchased;
         
-        // 4. 由于 type="number"，我们不需要在输入框中显示货币符号，它应该只显示纯数字
-        // 我们可以选择重新渲染购物车来显示格式化的总价，或者只更新总价。
-
-        // 5. 更新行样式和复选框状态
+        // 4. 更新行样式和复选框状态
         const row = inputElement.closest('.cart-item-row');
         if (row) {
             row.classList.toggle('purchased', isPurchased);
@@ -943,5 +975,3 @@
 </script>
 </body>
 </html>
-
-

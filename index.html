@@ -254,26 +254,46 @@
             border: none;
         }
         
-        /* 拷贝按钮样式 */
-        .copy-button {
+        /* 拷贝和同步按钮样式 */
+        .sync-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .sync-buttons button {
             width: 100%;
-            background-color: #007aff; 
-            color: white;
-            border: none;
             padding: 14px 0;
             font-size: 17px;
             font-weight: 600;
             border-radius: 12px;
             cursor: pointer;
+            border: none;
+            transition: background-color 0.2s, box-shadow 0.2s;
+        }
+
+        /* 拷贝按钮 */
+        .copy-button {
+            background-color: #007aff; 
+            color: white;
             box-shadow: 0 4px 10px rgba(0, 122, 255, 0.3);
             margin-top: 20px;
-            margin-bottom: 10px;
-            transition: background-color 0.2s, box-shadow 0.2s;
         }
         .copy-button:active {
             background-color: #005bb5;
             box-shadow: none;
         }
+        
+        /* 确认价格按钮（新增） */
+        .confirm-price-button {
+            background-color: #34c759; 
+            color: white;
+            box-shadow: 0 4px 10px rgba(52, 199, 89, 0.3);
+        }
+        .confirm-price-button:active {
+            background-color: #2eaf4c;
+            box-shadow: none;
+        }
+
 
         /* 红色按钮 (Destructive Action) */
         .reset-button {
@@ -359,7 +379,10 @@
             总支出: Ks 0
         </div>
         
-        <button class="copy-button" onclick="copyCartSummary()">📋 拷贝采购清单与总支出</button>
+        <div class="sync-buttons">
+             <button class="confirm-price-button" onclick="syncPricesAndStatus()">✅ 确认价格并同步</button>
+             <button class="copy-button" onclick="copyCartSummary()">📋 拷贝采购清单与总支出</button>
+        </div>
 
         <button class="reset-button" onclick="resetCart()">清空已完成项目</button>
     </div>
@@ -414,6 +437,7 @@
     // --- 实用工具函数 (保持不变) ---
     function parseFormattedPrice(formattedString) {
         if (!formattedString) return '';
+        // 移除所有非数字字符，但保留英文句号（如果需要小数）
         const cleanedString = String(formattedString).replace(/[^0-9.]/g, ''); 
         return parseFloat(cleanedString) || '';
     }
@@ -557,7 +581,8 @@
         }
         
         if (tabName === 'cart-tab') {
-            loadProductsFromCloud(); 
+            // 重新加载购物车内容时，重新渲染以确保最新的价格和状态显示
+            renderCart(); 
         }
     }
     
@@ -753,7 +778,6 @@
                  newCheckbox.checked = true;
              }
              
-             // 提醒用户点击“加入购物车”按钮
              alert("新项目已添加到清单并勾选，请点击 '加入购物车并前往结算' 完成添加。");
              
         } else {
@@ -780,25 +804,24 @@
                 const purchasedClass = item.purchased ? 'purchased' : '';
                 const checkedAttr = item.purchased ? 'checked' : '';
                 
-                // *** 修复点 3：在渲染时，输入框直接显示纯数字或格式化后的价格 ***
-                // 手机输入时，显示纯数字 (如果非空)，否则显示格式化后的价格
-                const displayValue = item.price ? item.price : formatPrice(item.price);
+                // 渲染时，显示格式化后的价格
+                const displayValue = formatPrice(item.price);
                 
                 tableHtml += `
                     <tr class="cart-item-row ${purchasedClass}">
                         <td>
-                            <input type="checkbox" ${checkedAttr} onchange="togglePurchased(${index})">
+                            <input type="checkbox" ${checkedAttr} id="cart-check-${index}">
                         </td>
                         <td><span class="item-name">${item.name}</span></td>
                         <td style="text-align: right;">
-                            <input type="text" 
+                            <input type="number" 
                                 class="price-input" 
-                                value="${displayValue}" 
-                                placeholder="0 ${CURRENCY_SYMBOL}" 
-                                inputmode="numeric" 
+                                value="${item.price || ''}" 
+                                placeholder="0" 
+                                data-index="${index}"
+                                id="price-input-${index}"
                                 pattern="[0-9]*"
-                                onfocus="this.value = parseFormattedPrice(this.value);"
-                                onblur="updateItemPrice(${index}, this.value, this)">
+                                >
                         </td>
                     </tr>
                 `;
@@ -808,58 +831,70 @@
         calculateTotalCost();
     }
     
-    // *** 修复点 4：价格更新逻辑 - 引入延迟格式化 ***
-    async function updateItemPrice(index, rawValueString, inputElement) {
-        // 1. 解析输入值
-        const rawValue = parseFormattedPrice(rawValueString);
-        const cartItems = cloudData.cartData;
+    // *** 核心修复：新的同步函数，绕开输入冲突 ***
+    async function syncPricesAndStatus() {
+        const inputElements = document.querySelectorAll('.price-input');
+        const checkElements = document.querySelectorAll('#cart-table-body input[type="checkbox"]');
+        let totalItemsUpdated = 0;
 
-        // 2. 确定是否已采购 (价格大于0即认为已采购)
-        const isPurchased = (rawValue !== '' && rawValue > 0);
-        
-        // 3. 更新底层数据
-        cartItems[index].price = rawValue; 
-        cartItems[index].purchased = isPurchased;
-        
-        // 4. 更新行样式和复选框状态（立即更新）
-        const row = inputElement.closest('.cart-item-row');
-        if (row) {
-            row.classList.toggle('purchased', isPurchased);
-            row.querySelector('input[type="checkbox"]').checked = isPurchased;
-        }
+        for (let i = 0; i < cloudData.cartData.length; i++) {
+            const inputElement = document.getElementById(`price-input-${i}`);
+            const checkElement = document.getElementById(`cart-check-${i}`);
+            
+            if (inputElement && checkElement) {
+                const rawValue = parseFormattedPrice(inputElement.value);
+                const isChecked = checkElement.checked;
 
-        // 5. 保存数据到云端（立即执行）
-        await saveProductsToCloud();
-        
-        // 6. 延迟重新格式化输入框显示（核心修复）
-        setTimeout(() => {
-            inputElement.value = formatPrice(rawValue);
-            calculateTotalCost(); 
-        }, 150); // 延迟 150ms，给移动端输入法关闭留出时间
-    }
-
-    async function togglePurchased(index) {
-        const cartItems = cloudData.cartData;
-        const currentCheckbox = event.target; 
-        const isChecked = currentCheckbox.checked;
-        
-        cartItems[index].purchased = isChecked;
-
-        if (!isChecked) {
-            // 如果取消勾选，清除价格
-            cartItems[index].price = '';
-            const row = currentCheckbox.closest('.cart-item-row');
-            if (row) {
-                // 确保价格输入框显示也清除
-                row.querySelector('.price-input').value = formatPrice('');
+                // 检查是否有变化
+                const priceChanged = cloudData.cartData[i].price !== rawValue;
+                const statusChanged = cloudData.cartData[i].purchased !== isChecked;
+                
+                if (priceChanged || statusChanged) {
+                    // 1. 更新数据模型
+                    cloudData.cartData[i].price = rawValue;
+                    
+                    // 如果价格大于0，自动设为已采购（如果用户未勾选，价格清零时，再由下面的逻辑处理）
+                    const newPurchasedStatus = isChecked || (rawValue > 0);
+                    cloudData.cartData[i].purchased = newPurchasedStatus;
+                    
+                    // 如果价格被清零，强制取消勾选
+                    if (rawValue === '') {
+                        cloudData.cartData[i].purchased = false;
+                    }
+                    
+                    totalItemsUpdated++;
+                }
             }
         }
         
-        calculateTotalCost(); 
-        
-        currentCheckbox.closest('.cart-item-row').classList.toggle('purchased', isChecked);
+        if (totalItemsUpdated > 0) {
+            await saveProductsToCloud();
+            renderCart(); // 重新渲染以显示格式化后的价格和正确的状态
+            alert(`✅ 已成功同步 ${totalItemsUpdated} 个项目的价格和状态！`);
+        } else {
+            alert("🛒 购物车中没有价格或状态的改动需要同步。");
+        }
+    }
 
-        await saveProductsToCloud(); 
+
+    async function togglePurchased(index) {
+        // 由于我们切换到了手动同步价格的模式，这里的状态改变将由 syncPricesAndStatus 统一处理
+        // 但是用户点击复选框时，我们应该立即更新 DOM 状态，以便 syncPricesAndStatus 读取
+        
+        const currentCheckbox = event.target; 
+        const isChecked = currentCheckbox.checked;
+        const row = currentCheckbox.closest('.cart-item-row');
+        const priceInput = row.querySelector('.price-input');
+        
+        row.classList.toggle('purchased', isChecked);
+        
+        if (!isChecked) {
+             // 如果取消勾选，清除输入框中的价格，等待用户确认同步
+             priceInput.value = '';
+        }
+        
+        // 提醒用户点击同步按钮
+        alert("提示：价格和勾选状态已在页面上修改，请点击 '确认价格并同步' 来保存和计算总价。");
     }
 
     function calculateTotalCost() {

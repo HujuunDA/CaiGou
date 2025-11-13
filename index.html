@@ -367,10 +367,10 @@
 
 <script>
     // *********************************************************************************
-    // *** 核心配置信息 - 【请将下面的占位符替换为您新账户的实际信息！】 ***
+    // *** 核心配置信息 - 【已替换为您新账户的实际信息！】 ***
     // *********************************************************************************
-    const JSONBIN_ID = 'YOUR_NEW_BIN_ID_HERE'; // 👈 【重要】替换为您在新账号中创建的 Bin ID
-    const JSONBIN_MASTER_KEY = 'YOUR_NEW_MASTER_KEY_HERE'; // 👈 【重要】替换为您新账号的 Master Key
+    const JSONBIN_ID = '69158efd43b1c97be9aaa457'; // ✅ 您的新 Bin ID
+    const JSONBIN_MASTER_KEY = '$2a$10$sDEJmJM09AqeDdTs7fLnCuerS4mWPFepEeFhDn9gNaT86Lwf2cUXu'; // ✅ 您的新 Master Key
     const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
     
     // --- 性能优化：缓存 DOM 引用 ---
@@ -461,12 +461,10 @@
     // --- 云同步函数 ---
     
     async function loadProductsFromCloud() {
-        if (!JSONBIN_ID || JSONBIN_ID === 'YOUR_NEW_BIN_ID_HERE' || !JSONBIN_MASTER_KEY || JSONBIN_MASTER_KEY === 'YOUR_NEW_MASTER_KEY_HERE') {
-             // 新账户配置未完成
+        if (!JSONBIN_ID || !JSONBIN_MASTER_KEY) {
              cloudData = { productTemplate: {"默认分类": ["示例商品"]}, cartData: [] };
-             DOM.loadingOverlay.textContent = "❗ 错误：请先在代码中替换 YOUR_NEW_BIN_ID_HERE 和 YOUR_NEW_MASTER_KEY_HERE。";
+             DOM.loadingOverlay.textContent = "❗ 错误：请检查代码中的 Master Key 或 Bin ID。";
              
-             // 允许程序在本地显示模板
              for (const category in cloudData.productTemplate) {
                 sortCategory(category);
             }
@@ -500,13 +498,16 @@
                 cloudData.productTemplate = json.record.productTemplate;
                 cloudData.cartData = json.record.cartData;
             } else if (json && json.record && typeof json.record === 'object') {
-                // Bin 首次创建时可能返回空对象，我们初始化数据结构
-                if (Object.keys(json.record).length === 0) {
+                // 如果 Bin 首次创建为空，或只包含初始 JSON，我们确保结构正确
+                if (!json.record.productTemplate) {
                      cloudData.productTemplate = {"默认分类": []};
-                     cloudData.cartData = [];
                 } else {
-                    cloudData.productTemplate = json.record;
+                    cloudData.productTemplate = json.record.productTemplate;
+                }
+                if (!json.record.cartData) {
                     cloudData.cartData = [];
+                } else {
+                    cloudData.cartData = json.record.cartData;
                 }
             } else {
                 // 如果云端数据为空，初始化一个默认结构
@@ -516,7 +517,7 @@
         } catch (error) {
             console.error('加载云端数据失败:', error);
             DOM.loadingOverlay.textContent = `❌ 加载失败，请检查配置或 Bin 权限。详情: ${error.message}`;
-            alert("加载云端数据失败！请检查 JSONBin 配置是否正确。");
+            alert("加载云端数据失败！请检查 JSONBin 配置是否正确，特别是 Bin ID 和 Master Key。");
         } finally {
             for (const category in cloudData.productTemplate) {
                 sortCategory(category);
@@ -534,8 +535,8 @@
     }
 
     async function saveProductsToCloud() {
-        if (!JSONBIN_ID || JSONBIN_ID === 'YOUR_NEW_BIN_ID_HERE' || !JSONBIN_MASTER_KEY || JSONBIN_MASTER_KEY === 'YOUR_NEW_MASTER_KEY_HERE') {
-            alert("❗ 警告：请先完成代码中的 Master Key 和 Bin ID 替换，数据才能上传！");
+        if (!JSONBIN_ID || !JSONBIN_MASTER_KEY) {
+            alert("❗ 警告：Master Key 或 Bin ID 缺失，数据无法上传！");
             return;
         }
         
@@ -771,7 +772,7 @@
         const smartCategoryKey = getCategoryByKeyword(itemName);
         const targetCategoryKey = smartCategoryKey || selectedCategoryKey;
         
-        // 如果目标分类不存在（例如，新 Bin 是空的）
+        // 如果目标分类不存在
         if (!cloudData.productTemplate[targetCategoryKey]) {
             cloudData.productTemplate[targetCategoryKey] = [];
         }

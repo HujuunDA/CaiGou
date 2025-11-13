@@ -187,6 +187,7 @@
             width: 120px; /* 稍微缩小下拉框 */
             flex-shrink: 0;
             text-overflow: ellipsis; 
+            border: 1px solid #d1d1d6;
         }
         .add-new-control button {
             width: 100px; /* 缩小按钮 */
@@ -366,10 +367,10 @@
 
 <script>
     // *********************************************************************************
-    // *** 核心配置信息 ***
+    // *** 核心配置信息 - 请确保您的 Master Key 匹配您在 JSONBin.io API Keys 页面上的 Primary Key ***
     // *********************************************************************************
-    const JSONBIN_ID = '6914d01eae596e708f552007'; 
-    const JSONBIN_MASTER_KEY = '$2a$10$IpDKTR7rokm3XA7rNEmLoeaqE9aZxj2Vu23VSYCVN7Hj5q8V1X25.'; 
+    const JSONBIN_ID = '6914d01eae596e708f552007'; // 您的 Public Bin ID
+    const JSONBIN_MASTER_KEY = '$2a$10$IpDKTR7rokm3XA7rNEmLoeaqE9aZxj2Vu23VSYCVN7Hj5q8V1X25.'; // 请确保这是您的 Primary Master Key
     const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
     
     // --- 性能优化：缓存 DOM 引用 ---
@@ -391,7 +392,7 @@
         maximumFractionDigits: 0
     });
     
-    // 核心修改：统一管理云端数据结构
+    // 核心数据结构
     let cloudData = {
         productTemplate: {}, // 主清单
         cartData: []         // 购物车数据
@@ -399,19 +400,56 @@
     
     let grandTotalCost = 0; 
 
-    // --- 智能分类关键字映射 ---
+    // --- 智能分类关键字映射 (保持不变) ---
     const KEYWORD_MAP = {
-        // 肉类/海鲜 🦞🥩
         '鸡': '肉类/海鲜 🦞🥩', '牛': '肉类/海鲜 🦞🥩', '猪': '肉类/海鲜 🦞🥩',
         '羊': '肉类/海鲜 🦞🥩', '鱼': '肉类/海鲜 🦞🥩', '虾': '肉类/海鲜 🦞🥩',
         '海鲜': '肉类/海鲜 🦞🥩', '肉': '肉类/海鲜 🦞🥩',
-        // 蔬菜 🥬
         '菜': '蔬菜 🥬', '菇': '蔬菜 🥬', '果': '蔬菜 🥬', '豆': '蔬菜 🥬', '椒': '蔬菜 🥬',
-        // 调料/酱料 🧂🧄
         '料': '调料/酱料 🧂🧄', '酱': '调料/酱料 🧂🧄', '醋': '调料/酱料 🧂🧄',
         '油': '调料/酱料 🧂🧄', '葱': '调料/酱料 🧂🧄', '蒜': '调料/酱料 🧂🧄',
         '盐': '调料/酱料 🧂🧄', '姜': '调料/酱料 🧂🧄',
     };
+
+    // --- 实用工具函数 (保持不变) ---
+    function parseFormattedPrice(formattedString) {
+        if (!formattedString) return '';
+        const cleanedString = String(formattedString).replace(/[^0-9]/g, '');
+        return parseFloat(cleanedString) || '';
+    }
+
+    function formatPrice(number) {
+        const num = parseFloat(number);
+        if (isNaN(num) || num === 0) return '';
+        return formatter.format(num) + CURRENCY_SUFFIX;
+    }
+    
+    function getCategoryByKeyword(itemName) {
+        for (const keyword in KEYWORD_MAP) {
+            if (itemName.includes(keyword)) {
+                return KEYWORD_MAP[keyword];
+            }
+        }
+        return null; 
+    }
+
+    function sortCategory(categoryKey) {
+        if (cloudData.productTemplate[categoryKey]) {
+            cloudData.productTemplate[categoryKey].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+        }
+    }
+    
+    // *** 修复点 1：将此函数移到全局作用域 ***
+    function populateCategorySelect() {
+        let optionsHtml = '';
+        for (const category in cloudData.productTemplate) {
+            optionsHtml += `<option value="${category}">${category}</option>`;
+        }
+        DOM.newProductCategory.innerHTML = optionsHtml;
+        if (DOM.newProductCategory.options.length > 0) {
+            DOM.newProductCategory.selectedIndex = 0;
+        }
+    }
 
     // --- 云同步函数 ---
     
@@ -426,12 +464,14 @@
             const response = await fetch(JSONBIN_URL, {
                 method: 'GET',
                 headers: {
-                    'X-Master-Key': JSONBIN_MASTER_KEY
+                    // 即使是 Public Bin，也建议带上 Master Key，提高访问可靠性
+                    'X-Master-Key': JSONBIN_MASTER_KEY 
                 }
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}. 请检查 Bin 是否设置为 Public。`);
+                // 如果是 404，可能是 ID 错误。如果是 401/403，可能是 Master Key 错误。
+                throw new Error(`HTTP error! status: ${response.status}. 请检查 Bin ID 和 Master Key。`);
             }
 
             const json = await response.json();
@@ -446,15 +486,16 @@
                 throw new Error('云端数据格式不正确。');
             }
         } catch (error) {
-            console.error('加载云端数据失败，请检查 Bin ID、Master Key 或 Bin 权限:', error);
-            DOM.loadingOverlay.textContent = "❌ 加载失败，请检查配置或 Bin 权限。";
+            console.error('加载云端数据失败:', error);
+            DOM.loadingOverlay.textContent = `❌ 加载失败，请检查配置或 Bin 权限。详情: ${error.message}`;
             alert("加载云端数据失败！请检查 JSONBin 配置是否正确。");
         } finally {
+            // *** 修复点 1：确保调用这些子函数时，它们在全局已定义 ***
             for (const category in cloudData.productTemplate) {
                 sortCategory(category);
             }
             renderProductList();
-            populateCategorySelect();
+            populateCategorySelect(); // <--- 修复后可以正常调用
             renderCart(); 
             
             // 恢复 Tab 状态
@@ -491,33 +532,12 @@
         }
     }
     
-    // --- 实用工具函数 ---
-
-    function parseFormattedPrice(formattedString) {
-        if (!formattedString) return '';
-        const cleanedString = String(formattedString).replace(/[^0-9]/g, '');
-        return parseFloat(cleanedString) || '';
-    }
-
-    function formatPrice(number) {
-        const num = parseFloat(number);
-        if (isNaN(num) || num === 0) return '';
-        return formatter.format(num) + CURRENCY_SUFFIX;
-    }
-    
-    function sortCategory(categoryKey) {
-        if (cloudData.productTemplate[categoryKey]) {
-            cloudData.productTemplate[categoryKey].sort((a, b) => a.localeCompare(b, 'zh-CN'));
-        }
-    }
-
     // --- 初始化和加载 ---
 
     document.addEventListener('DOMContentLoaded', () => {
         loadProductsFromCloud(); 
     });
 
-    // *** 修复点 5：Tab 页面记忆功能 ***
     function openTab(evt, tabName) {
         // 1. 记录当前 Tab 到 sessionStorage
         sessionStorage.setItem('activeTab', tabName);
@@ -554,7 +574,6 @@
     function renderProductList() {
         let listHtml = '';
         
-        // 建立一个 Set，包含所有当前在购物车中的项目名称，方便快速查找
         const cartItemNames = new Set(cloudData.cartData.map(item => item.name));
         
         for (const category in cloudData.productTemplate) {
@@ -570,7 +589,6 @@
                 const escapedCategory = category.replace(/'/g, "\\'");
                 const escapedItem = item.replace(/'/g, "\\'");
 
-                // 根据购物车是否存在该项目来确定是否勾选
                 const isChecked = cartItemNames.has(item) ? 'checked' : '';
 
                 listHtml += `
@@ -594,7 +612,6 @@
         DOM.productList.innerHTML = listHtml;
     }
     
-    // ... (editProduct, deleteProduct 函数保持不变，因为它们工作正常) ...
     async function editProduct(category, oldName) {
         const newName = prompt(`请输入 "${oldName}" 的新名称：`, oldName);
         
@@ -654,12 +671,10 @@
         }
     }
 
-    // *** 修复点 2：新增采购项到购物车时，保留未被勾选的项目 ***
     async function addSelectedToCart() {
         const checkboxes = document.querySelectorAll('#product-list input[type="checkbox"]');
         let selectedCount = 0;
         
-        // 1. 建立一个 Map 来存储现有购物车的状态（包括未勾选的）
         const existingCartMap = new Map();
         for (const item of cloudData.cartData) {
             existingCartMap.set(item.name, { purchased: item.purchased, price: item.price });
@@ -668,13 +683,11 @@
         const newCartItems = [];
         const selectedItemNames = new Set();
 
-        // 2. 遍历选品清单，将所有勾选的项目加入新购物车
         for (const checkbox of checkboxes) {
             const itemName = checkbox.getAttribute('data-item-name');
             const existingItem = existingCartMap.get(itemName);
 
             if (checkbox.checked) {
-                // 如果勾选，则加入新列表，并继承旧状态（如果存在）
                 newCartItems.push({
                     name: itemName,
                     purchased: existingItem ? existingItem.purchased : false,
@@ -685,10 +698,9 @@
             }
         }
         
-        // 3. 遍历旧购物车，将所有未在选品清单中被勾选但存在的项目**重新添加**回来（确保数据不丢失）
+        // 确保未被选中的旧购物车项目也保留
         for (const item of cloudData.cartData) {
             if (!selectedItemNames.has(item.name)) {
-                // 如果旧项目不在新选中的列表中，则保留其状态和价格
                  newCartItems.push(item);
             }
         }
@@ -708,7 +720,6 @@
         alert(`成功添加 ${selectedCount} 件商品到购物车，请在结算页记录价格！`);
     }
 
-    // ... (addNewProductToList 保持不变，因为它工作正常) ...
     async function addNewProductToList() {
         const itemName = DOM.newProductInput.value.trim();
         const selectedCategoryKey = DOM.newProductCategory.value;
@@ -718,7 +729,6 @@
             return;
         }
         
-        // 1. 检查重复项
         for (const category in cloudData.productTemplate) {
             if (cloudData.productTemplate[category].includes(itemName)) {
                  alert(`"${itemName}" 已经在清单中！`);
@@ -728,23 +738,18 @@
             }
         }
 
-        // 2. 确定目标分类
         const smartCategoryKey = getCategoryByKeyword(itemName);
         const targetCategoryKey = smartCategoryKey || selectedCategoryKey;
         
-        // 确保目标分类存在
         if (cloudData.productTemplate[targetCategoryKey]) {
-             // 3. 添加到目标分类
              cloudData.productTemplate[targetCategoryKey].push(itemName);
              
-             // 4. 立即排序该分类
              sortCategory(targetCategoryKey); 
              
              await saveProductsToCloud();
              
              renderProductList(); 
              
-             // 5. 自动勾选新添加的项
              const newCheckbox = document.querySelector(`input[data-item-name="${itemName}"]`);
              if (newCheckbox) newCheckbox.checked = true;
         } else {
@@ -800,12 +805,10 @@
         const rawValue = parseFormattedPrice(rawValueString);
         const cartItems = cloudData.cartData;
 
-        // 仅在价格发生变化时，才更新 purchased 状态，防止手动修改状态被覆盖
         const isPurchased = (rawValue !== '' && rawValue > 0);
         
         cartItems[index].price = rawValue; 
         
-        // 自动勾选/取消勾选，只有价格有值时才自动勾选
         cartItems[index].purchased = isPurchased;
         
         inputElement.value = formatPrice(rawValue);
@@ -815,7 +818,6 @@
         const row = inputElement.closest('.cart-item-row');
         if (row) {
             row.classList.toggle('purchased', isPurchased);
-            // 确保同步更新 checkbox 状态
             row.querySelector('input[type="checkbox"]').checked = isPurchased;
         }
 
@@ -829,10 +831,8 @@
         
         cartItems[index].purchased = isChecked;
 
-        // 如果取消勾选，清除价格
         if (!isChecked) {
             cartItems[index].price = '';
-            // 找到对应的价格输入框并更新其显示
             const row = currentCheckbox.closest('.cart-item-row');
             if (row) {
                 row.querySelector('.price-input').value = formatPrice('');
@@ -862,7 +862,6 @@
         DOM.cartTotalDisplay.textContent = `总支出: ${formatter.format(grandTotalCost)}${CURRENCY_SUFFIX}`;
     }
     
-    // ... (copyCartSummary 保持不变) ...
     async function copyCartSummary() {
         const now = new Date();
         const year = now.getFullYear();
@@ -911,7 +910,6 @@
         }
     }
 
-    // *** 修复点 3 & 4：清空购物车逻辑优化，只清除已完成项目 ***
     async function resetCart() {
         const cartItems = cloudData.cartData;
         const purchasedItems = cartItems.filter(item => item.purchased);
@@ -922,15 +920,12 @@
         }
 
         if (confirm(`确定要清空 ${purchasedItems.length} 个已完成的项目吗？`)) {
-            // 1. 过滤掉所有已勾选的项目
             cloudData.cartData = cartItems.filter(item => !item.purchased);
             
             await saveProductsToCloud(); 
             
-            // 2. 重新渲染购物车页面
             renderCart();
             
-            // 3. 切换回选品清单并重新渲染，确保已清除的项目的勾选状态被同步移除
             openTab(null, 'product-tab');
             renderProductList(); 
 

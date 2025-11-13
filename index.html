@@ -414,7 +414,8 @@
     // --- 实用工具函数 (保持不变) ---
     function parseFormattedPrice(formattedString) {
         if (!formattedString) return '';
-        const cleanedString = String(formattedString).replace(/[^0-9]/g, '');
+        // 移除所有非数字字符，但保留英文句号和逗号（如果需要小数）
+        const cleanedString = String(formattedString).replace(/[^0-9.]/g, ''); 
         return parseFloat(cleanedString) || '';
     }
 
@@ -566,6 +567,7 @@
     function renderProductList() {
         let listHtml = '';
         
+        // 购物车中的项目名称集合
         const cartItemNames = new Set(cloudData.cartData.map(item => item.name));
         
         for (const category in cloudData.productTemplate) {
@@ -581,6 +583,7 @@
                 const escapedCategory = category.replace(/'/g, "\\'");
                 const escapedItem = item.replace(/'/g, "\\'");
 
+                // 如果项目在购物车中，则自动勾选，否则不勾选
                 const isChecked = cartItemNames.has(item) ? 'checked' : '';
 
                 listHtml += `
@@ -663,7 +666,7 @@
         }
     }
 
-    // *** 修复点：添加后自动取消勾选 ***
+    // *** 修复点 1：加入购物车并取消勾选 ***
     async function addSelectedToCart() {
         const checkboxes = document.querySelectorAll('#product-list input[type="checkbox"]');
         let selectedCount = 0;
@@ -675,13 +678,13 @@
         
         const newCartItems = [];
         const selectedItemNames = new Set();
-        const checkedElements = []; // 新增：用于存储所有被勾选的 DOM 元素
-
+        
         for (const checkbox of checkboxes) {
             const itemName = checkbox.getAttribute('data-item-name');
             const existingItem = existingCartMap.get(itemName);
 
             if (checkbox.checked) {
+                // 如果勾选，则加入新购物车，并继承旧状态
                 newCartItems.push({
                     name: itemName,
                     purchased: existingItem ? existingItem.purchased : false,
@@ -689,11 +692,13 @@
                 });
                 selectedItemNames.add(itemName);
                 selectedCount++;
-                checkedElements.push(checkbox); // 存储被勾选的元素
+                
+                // *** 核心修复：立即取消 DOM 上的勾选状态 ***
+                checkbox.checked = false;
             }
         }
         
-        // 确保未被选中的旧购物车项目也保留
+        // 确保未在当前操作中被选中的旧购物车项目也保留
         for (const item of cloudData.cartData) {
             if (!selectedItemNames.has(item.name)) {
                  newCartItems.push(item);
@@ -711,15 +716,6 @@
         
         renderCart();
         
-        // *** 新增逻辑：取消勾选选品清单中的项目 ***
-        for (const checkbox of checkedElements) {
-            checkbox.checked = false; 
-        }
-        // 由于 renderProductList() 会根据 cartData 重新判断勾选状态，
-        // 并且我们已将所有项目添加到 cartData，所以这里不需要重新渲染整个列表
-        // 但我们保留这行代码，以防未来逻辑变化：
-        // renderProductList(); 
-
         openTab(null, 'cart-tab');
         alert(`成功添加 ${selectedCount} 件商品到购物车，请在结算页记录价格！`);
     }
@@ -755,16 +751,15 @@
              // 重新渲染列表，确保新添加的项出现
              renderProductList(); 
              
-             // 自动勾选新添加的项，并将其加入购物车
+             // 自动勾选新添加的项
              const newCheckbox = document.querySelector(`input[data-item-name="${itemName}"]`);
              if (newCheckbox) {
                  newCheckbox.checked = true;
-                 // 自动执行添加到购物车和取消勾选的流程
-                 await addSelectedToCart(); 
-             } else {
-                 // 如果没有自动勾选，至少保证数据已添加
-                 renderCart();
              }
+             
+             // *** 修复点 1：移除冗余的 addSelectedToCart() 调用，避免双重操作和逻辑混乱 ***
+             // addSelectedToCart(); 
+             
         } else {
             alert("错误：无法找到目标分类。");
         }
@@ -803,7 +798,7 @@
                                 placeholder="0 ${CURRENCY_SYMBOL}" 
                                 inputmode="numeric" 
                                 pattern="[0-9]*"
-                                onfocus="this.value = parseFormattedPrice(this.value);"
+                                
                                 onblur="updateItemPrice(${index}, this.value, this)">
                         </td>
                     </tr>
@@ -814,20 +809,25 @@
         calculateTotalCost();
     }
     
+    // *** 修复点 2：价格更新逻辑，保持简洁和稳定 ***
     async function updateItemPrice(index, rawValueString, inputElement) {
+        // 解析输入值
         const rawValue = parseFormattedPrice(rawValueString);
         const cartItems = cloudData.cartData;
 
+        // 确定是否已采购 (价格大于0即认为已采购)
         const isPurchased = (rawValue !== '' && rawValue > 0);
         
+        // 更新底层数据
         cartItems[index].price = rawValue; 
-        
         cartItems[index].purchased = isPurchased;
         
+        // 重新格式化并更新输入框显示
         inputElement.value = formatPrice(rawValue);
 
         calculateTotalCost(); 
         
+        // 更新行样式和复选框状态
         const row = inputElement.closest('.cart-item-row');
         if (row) {
             row.classList.toggle('purchased', isPurchased);
@@ -845,9 +845,11 @@
         cartItems[index].purchased = isChecked;
 
         if (!isChecked) {
+            // 如果取消勾选，清除价格
             cartItems[index].price = '';
             const row = currentCheckbox.closest('.cart-item-row');
             if (row) {
+                // 确保价格输入框显示也清除
                 row.querySelector('.price-input').value = formatPrice('');
             }
         }

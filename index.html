@@ -3,134 +3,164 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>极速扫码助手 v1.0</title>
+    <title>极速扫码 Pro</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
     <style>
-        :root { --primary: #007AFF; }
-        body { font-family: -apple-system, system-ui; margin: 0; background: #f0f0f7; color: #333; }
-        #reader { width: 100%; background: #000; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
-        .controls { padding: 15px; display: flex; gap: 10px; justify-content: center; }
-        button { padding: 12px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        .btn-download { background: #28a745; color: white; }
-        .btn-clear { background: #dc3545; color: white; }
+        :root { --ios-blue: #007AFF; --ios-green: #34C759; --ios-red: #FF3B30; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica; margin: 0; background: #f2f2f7; color: #1c1c1e; }
         
-        #log-container { padding: 15px; }
-        .log-item { 
-            background: white; padding: 12px; border-radius: 8px; margin-bottom: 8px;
-            display: flex; align-items: center; justify-content: space-between;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
-        .log-info { display: flex; flex-direction: column; }
-        .log-id { font-weight: bold; font-size: 16px; color: var(--primary); }
-        .log-time { font-size: 12px; color: #888; }
-        .thumb { width: 50px; height: 50px; border-radius: 4px; object-fit: cover; }
+        /* 扫描窗口 */
+        #reader { width: 100%; background: #000; position: relative; }
         
-        /* 扫描成功动画 */
-        .scan-flash { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(255,255,255,0.8); display:none; pointer-events: none; }
+        /* 状态指示灯 */
+        #status-dot { position: absolute; top: 15px; left: 15px; width: 12px; height: 12px; border-radius: 50%; background: var(--ios-green); box-shadow: 0 0 8px var(--ios-green); z-index: 10; }
+
+        /* 顶部控制栏 */
+        .top-bar { display: flex; justify-content: space-around; padding: 15px; background: white; border-bottom: 1px solid #d1d1d6; }
+        .stat-card { text-align: center; flex: 1; border-right: 1px solid #eee; }
+        .stat-num { font-size: 20px; font-weight: bold; color: var(--ios-blue); }
+        .stat-label { font-size: 12px; color: #8e8e93; }
+
+        /* 操作按钮 */
+        .action-btns { padding: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        button { padding: 14px; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+        button:active { opacity: 0.7; }
+        .btn-save { background: var(--ios-green); color: white; }
+        .btn-clear { background: #e5e5ea; color: var(--ios-red); }
+
+        /* 列表显示 */
+        #log-list { padding: 0 15px 100px; }
+        .log-item { background: white; padding: 12px; border-radius: 12px; margin-bottom: 10px; display: flex; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .log-img { width: 60px; height: 60px; border-radius: 8px; object-fit: cover; margin-right: 12px; border: 1px solid #eee; }
+        .log-content { flex: 1; }
+        .log-code { font-size: 17px; font-weight: bold; margin-bottom: 4px; display: block; }
+        .log-time { font-size: 13px; color: #8e8e93; }
+
+        /* 闪光反馈 */
+        #flash-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; z-index:99; }
     </style>
 </head>
 <body>
 
-<div id="reader"></div>
-<div class="scan-flash" id="flash"></div>
+<div id="flash-overlay"></div>
+<div id="reader"><div id="status-dot"></div></div>
 
-<div class="controls">
-    <button class="btn-download" onclick="downloadExcel()">下载 Excel 报表</button>
-    <button class="btn-clear" onclick="clearData()">清空记录</button>
+<div class="top-bar">
+    <div class="stat-card">
+        <div class="stat-num" id="count-total">0</div>
+        <div class="stat-label">今日扫描</div>
+    </div>
+    <div class="stat-card" style="border:none">
+        <div class="stat-num" style="color:#8e8e93" id="last-code">---</div>
+        <div class="stat-label">最后扫描</div>
+    </div>
 </div>
 
-<div id="log-container">
-    <h3 id="counter">已扫描: 0 条</h3>
-    <div id="log-list"></div>
+<div class="action-btns">
+    <button class="btn-save" onclick="exportToExcel()">导出 Excel</button>
+    <button class="btn-clear" onclick="clearData()">清空数据</button>
 </div>
+
+<div id="log-list"></div>
+
+<audio id="beep-sound" src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3" preload="auto"></audio>
 
 <script>
-    let scanData = JSON.parse(localStorage.getItem('scanned_items') || '[]');
-    let lastScan = ""; // 防重复扫描
-    let isProcessing = false;
+    let scanData = JSON.parse(localStorage.getItem('my_scans') || '[]');
+    let isLocked = false;
+    const beep = document.getElementById('beep-sound');
 
-    const html5QrCode = new Html5Qrcode("reader");
-
-    // 更新界面显示
-    function updateUI() {
-        const list = document.getElementById('log-list');
-        list.innerHTML = "";
-        document.getElementById('counter').innerText = `已扫描: ${scanData.length} 条`;
+    // 1. 初始化扫描器
+    const scanner = new Html5Qrcode("reader");
+    
+    // 2. 核心：成功后的反馈
+    function handleSuccess(text) {
+        if (isLocked) return;
         
-        scanData.slice().reverse().forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'log-item';
-            div.innerHTML = `
-                <div class="log-info">
-                    <span class="log-id">${item.code}</span>
-                    <span class="log-time">${item.time}</span>
-                </div>
-                <img src="${item.img}" class="thumb">
-            `;
-            list.appendChild(div);
-        });
-        localStorage.setItem('scanned_items', JSON.stringify(scanData));
+        // 检查是否重复扫描（3秒内）
+        if (scanData.length > 0 && scanData[scanData.length-1].code === text) {
+            console.log("重复跳过");
+            return;
+        }
+
+        isLocked = true; // 锁定防止重影
+
+        // --- 物理反馈区 ---
+        // 震动 (iOS 需要用户先点击过屏幕才能触发)
+        if (navigator.vibrate) navigator.vibrate(80); 
+        // 声音
+        beep.currentTime = 0;
+        beep.play().catch(e => console.log("等待交互触发声音"));
+        // 视觉闪烁
+        document.getElementById('flash-overlay').style.opacity = '0.5';
+        setTimeout(() => document.getElementById('flash-overlay').style.opacity = '0', 100);
+
+        // --- 数据处理区 ---
+        const video = document.querySelector('video');
+        const canvas = document.createElement('canvas');
+        canvas.width = 200; canvas.height = 150;
+        canvas.getContext('2d').drawImage(video, 0, 0, 200, 150);
+        
+        const newItem = {
+            code: text,
+            time: new Date().toLocaleTimeString(),
+            date: new Date().toLocaleDateString(),
+            img: canvas.toDataURL('image/jpeg', 0.5)
+        };
+
+        scanData.push(newItem);
+        saveAndRefresh();
+
+        // 3秒后解锁，允许扫下一个
+        setTimeout(() => { isLocked = false; }, 2000);
     }
 
-    // 扫描成功逻辑
-    const onScanSuccess = (decodedText) => {
-        // 1. 防抖逻辑：如果 2 秒内扫描到同一个码，不触发
-        if (decodedText === lastScan || isProcessing) return;
+    function saveAndRefresh() {
+        localStorage.setItem('my_scans', JSON.stringify(scanData));
+        document.getElementById('count-total').innerText = scanData.length;
+        if(scanData.length > 0) document.getElementById('last-code').innerText = scanData[scanData.length-1].code.substring(0,8) + '...';
         
-        isProcessing = true;
-        lastScan = decodedText;
-        setTimeout(() => { lastScan = ""; }, 2000);
+        const list = document.getElementById('log-list');
+        list.innerHTML = scanData.slice().reverse().map(item => `
+            <div class="log-item">
+                <img src="${item.img}" class="log-img">
+                <div class="log-content">
+                    <span class="log-code">${item.code}</span>
+                    <span class="log-time">${item.date} ${item.time}</span>
+                </div>
+            </div>
+        `).join('');
+    }
 
-        // 2. 交互反馈
-        if (navigator.vibrate) navigator.vibrate([100]);
-        document.getElementById('flash').style.display = 'block';
-        setTimeout(() => { document.getElementById('flash').style.display = 'none'; }, 100);
-
-        // 3. 抓拍
-        const video = document.querySelector('#reader video');
-        const canvas = document.createElement('canvas');
-        canvas.width = 160; // 缩略图减小体积，节省手机内存
-        canvas.height = 120;
-        canvas.getContext('2d').drawImage(video, 0, 0, 160, 120);
-        const imgData = canvas.toDataURL("image/jpeg", 0.6); // 压缩图片质量
-
-        // 4. 保存数据
-        const newItem = {
-            code: decodedText,
-            time: new Date().toLocaleString(),
-            img: imgData
-        };
-        scanData.push(newItem);
-        updateUI();
-        
-        isProcessing = false;
-    };
-
-    // 导出 Excel
-    function downloadExcel() {
-        if (scanData.length === 0) return alert("没有记录可导出");
-        const worksheet = XLSX.utils.json_to_sheet(scanData.map(i => ({ "单号": i.code, "扫描时间": i.time })));
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "扫描记录");
-        XLSX.writeFile(workbook, `扫描记录_${new Date().getTime()}.xlsx`);
+    // 导出功能
+    function exportToExcel() {
+        if (scanData.length === 0) return alert("暂无数据");
+        const ws = XLSX.utils.json_to_sheet(scanData.map(i => ({ "单号": i.code, "时间": i.date + ' ' + i.time })));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Scans");
+        XLSX.writeFile(wb, `Scan_Report_${new Date().getTime()}.xlsx`);
     }
 
     function clearData() {
-        if (confirm("确定要清空所有记录吗？")) {
+        if (confirm("确定删除所有本地记录？")) {
             scanData = [];
-            updateUI();
+            saveAndRefresh();
         }
     }
 
-    // 启动
-    html5QrCode.start(
+    // 启动摄像头 (针对 iPhone 14 Pro Max 优化)
+    scanner.start(
         { facingMode: "environment" },
-        { fps: 20, qrbox: { width: 250, height: 200 } },
-        onScanSuccess
+        { 
+            fps: 25, 
+            qrbox: { width: 260, height: 200 },
+            aspectRatio: 1.777778 // 16:9 适合大屏手机
+        },
+        handleSuccess
     );
 
-    updateUI(); // 初始化加载
+    saveAndRefresh();
 </script>
 </body>
 </html>

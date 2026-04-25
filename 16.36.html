@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>采购助手 - 即时同步版 | 烧烤店明亮风</title>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Poppins', system-ui, -apple-system, 'Inter', sans-serif;
+            background: radial-gradient(circle at 30% 10%, #2a2218, #1a140e, #0f0b07);
+            min-height: 100vh;
+            padding-bottom: 100px;
+            position: relative;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            top: -20%;
+            left: -15%;
+            width: 130%;
+            height: 130%;
+            background: radial-gradient(ellipse at 40% 50%, rgba(255, 160, 70, 0.25), rgba(255, 100, 30, 0) 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body::after {
+            content: "";
+            position: fixed;
+            bottom: -15%;
+            right: -10%;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 70% 85%, rgba(255, 140, 50, 0.22), transparent 65%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .glass-card {
+            backdrop-filter: blur(16px);
+            background: rgba(255, 245, 225, 0.2);
+            border: 1px solid rgba(255, 180, 100, 0.5);
+            border-radius: 28px;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(255, 160, 80, 0.15);
+            transition: all 0.25s cubic-bezier(0.2, 0, 0, 1);
+        }
+
+        .glass-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 245, 225, 0.3);
+            border-color: rgba(255, 160, 80, 0.8);
+            box-shadow: 0 20px 32px -8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 140, 60, 0.4);
+        }
+
+        .header-bar {
+            position: sticky;
+            top: 0;
+            z-index: 110;
+            backdrop-filter: blur(24px);
+            background: rgba(30, 22, 14, 0.7);
+            border-bottom: 1px solid rgba(255, 160, 70, 0.6);
+            padding: 12px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .back-btn {
+            background: rgba(255, 200, 140, 0.2);
+            border: 1px solid rgba(255, 150, 60, 0.7);
+            color: #ffc285;
+            font-size: 26px;
+            cursor: pointer;
+            width: 40px;
+            height: 40px;
+            border-radius: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+            transition: 0.2s;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 140, 50, 0.45);
+            border-color: #ffaa66;
+            transform: scale(0.96);
+        }
+
+        .header-title {
+            flex: 1;
+            font-size: 20px;
+            font-weight: 800;
+            text-align: center;
+            letter-spacing: 1px;
+            background: linear-gradient(135deg, #ffcd94, #ffa044);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 14px;
+            padding: 16px 18px;
+            background: transparent;
+            position: sticky;
+            top: 64px;
+            z-index: 105;
+            backdrop-filter: blur(8px);
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 12px 0;
+            border: none;
+            border-radius: 60px;
+            font-weight: 700;
+            font-size: 16px;
+            background: rgba(255, 235, 200, 0.25);
+            backdrop-filter: blur(12px);
+            color: #ffdfb3;
+            border: 1px solid rgba(255, 150, 60, 0.5);
+            transition: 0.2s;
+            cursor: pointer;
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(105deg, rgba(255, 120, 40, 0.95), rgba(220, 80, 20, 0.95));
+            color: white;
+            border-color: #ffcc88;
+            box-shadow: 0 6px 14px rgba(255, 100, 0, 0.35);
+            text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+        }
+
+        .tab-content {
+            display: none;
+            padding: 14px 16px 28px;
+            animation: fadeSlide 0.25s ease;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeSlide {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .category-group {
+            backdrop-filter: blur(18px);
+            background: rgba(255, 245, 230, 0.2);
+            border-radius: 32px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 170, 80, 0.5);
+            transition: all 0.2s ease;
+            overflow: hidden;
+        }
+
+        .category-group:hover {
+            transform: translateY(-4px);
+            background: rgba(255, 245, 230, 0.3);
+            border-color: rgba(255, 150, 70, 0.8);
+            box-shadow: 0 18px 28px -8px rgba(0, 0, 0, 0.3);
+        }
+
+        .category-header {
+            background: rgba(255, 140, 50, 0.25);
+            padding: 12px 18px;
+            font-size: 15px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            color: #ffddb0;
+            border-bottom: 1px solid rgba(255, 150, 60, 0.5);
+            backdrop-filter: blur(4px);
+        }
+
+        .item-row {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 180, 100, 0.25);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: 0.15s;
+        }
+
+        .price-wrapper {
+            width: 100px;
+            margin-left: 12px;
+        }
+
+        .price-input {
+            width: 100%;
+            padding: 8px 10px;
+            background: rgba(255, 240, 210, 0.7);
+            border: 1px solid rgba(255, 140, 50, 0.8);
+            border-radius: 24px;
+            text-align: right;
+            font-size: 14px;
+            font-weight: 600;
+            color: #c25d1a;
+            backdrop-filter: blur(4px);
+            transition: 0.2s;
+        }
+
+        .price-input:focus {
+            outline: none;
+            border-color: #ff8c42;
+            background: rgba(255, 250, 235, 0.9);
+            box-shadow: 0 0 8px rgba(255, 120, 30, 0.5);
+        }
+
+        .qty-ctrl {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 220, 170, 0.3);
+            backdrop-filter: blur(8px);
+            border-radius: 40px;
+            padding: 4px 14px;
+            border: 1px solid rgba(255, 150, 60, 0.6);
+        }
+
+        .qty-btn {
+            width: 28px;
+            border: none;
+            background: transparent;
+            font-size: 20px;
+            color: #ffaa55;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.1s;
+        }
+
+        .qty-btn:active {
+            transform: scale(0.9);
+            color: #ff7b2c;
+        }
+
+        .action-btn-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .del-btn {
+            color: #ff7a5c;
+            font-size: 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+
+        .quick-add-bar {
+            backdrop-filter: blur(24px);
+            background: rgba(255, 245, 225, 0.3);
+            border-radius: 48px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 18px;
+            border: 1px solid rgba(255, 170, 80, 0.6);
+            transition: 0.2s;
+        }
+
+        .quick-input {
+            flex: 2;
+            min-width: 120px;
+            background: rgba(255, 250, 235, 0.8);
+            border: 1px solid #ffac62;
+            padding: 10px 14px;
+            border-radius: 32px;
+            font-size: 14px;
+            color: #834e1a;
+        }
+
+        .quick-price {
+            flex: 1;
+            min-width: 90px;
+            background: rgba(255, 250, 235, 0.8);
+            border: 1px solid #ffac62;
+            padding: 10px 14px;
+            border-radius: 32px;
+            font-size: 14px;
+            color: #834e1a;
+        }
+
+        .add-btn {
+            flex-shrink: 0;
+            background: linear-gradient(120deg, #f9732e, #e05a1a);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 40px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(12px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+        }
+
+        .modal-overlay.open {
+            display: flex;
+        }
+
+        .modal-content {
+            background: rgba(255, 245, 230, 0.92);
+            backdrop-filter: blur(28px);
+            border-radius: 44px;
+            width: 90%;
+            max-width: 340px;
+            padding: 24px;
+            border: 1px solid rgba(255, 130, 40, 0.9);
+            box-shadow: 0 25px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .modal-input {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            background: rgba(255, 250, 240, 0.9);
+            border: 1px solid #ff9f4a;
+            border-radius: 32px;
+            color: #5a3412;
+            font-size: 15px;
+        }
+
+        .primary-btn {
+            background: linear-gradient(100deg, #fa6928, #cf5016);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 44px;
+            font-weight: bold;
+            font-size: 16px;
+            width: 100%;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 6px 14px rgba(0,0,0,0.25);
+            margin-top: 12px;
+        }
+
+        .primary-btn:active {
+            transform: scale(0.97);
+        }
+
+        .total-bar {
+            backdrop-filter: blur(28px);
+            background: rgba(30, 22, 12, 0.85);
+            border-top: 1px solid #ffb45e;
+            padding: 16px 22px;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+            border-radius: 32px 32px 0 0;
+        }
+
+        #grandTotal {
+            font-size: 20px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffd199, #ffaa55);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+
+        #saveIndicator {
+            position: fixed;
+            top: 80px;
+            right: 18px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(18px);
+            color: #ffcf94;
+            padding: 6px 18px;
+            border-radius: 40px;
+            font-size: 12px;
+            opacity: 0;
+            transition: 0.25s;
+            z-index: 120;
+            border: 1px solid #ffac62;
+            font-weight: 500;
+            pointer-events: none;
+        }
+
+        #saveIndicator.show {
+            opacity: 1;
+        }
+
+        .cat-dropdown {
+            position: absolute;
+            background: rgba(255, 245, 225, 0.96);
+            backdrop-filter: blur(20px);
+            border: 1px solid #ffa657;
+            border-radius: 28px;
+            width: calc(100% - 40px);
+            max-height: 130px;
+            overflow-y: auto;
+            z-index: 210;
+            display: none;
+        }
+
+        .cat-option {
+            padding: 12px;
+            border-bottom: 1px solid rgba(255, 140, 40, 0.3);
+            color: #a1521a;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .cat-option:hover {
+            background: rgba(255, 140, 50, 0.25);
+        }
+
+        input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #f57c2e;
+            transform: translateY(2px);
+        }
+
+        button, .back-btn, .tab-btn, .add-btn, .qty-btn, .del-btn, .primary-btn {
+            cursor: pointer;
+        }
+
+        .price-input::placeholder {
+            color: #b46f30;
+        }
+        span, .item-row span {
+            color: #ffefcf;
+            font-weight: 500;
+        }
+
+        #cartList .item-row {
+            background: rgba(255, 245, 230, 0.25);
+            backdrop-filter: blur(12px);
+            border-radius: 36px;
+            margin-bottom: 14px;
+            padding: 14px 18px;
+            border: 1px solid rgba(255, 170, 80, 0.6);
+            transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        #cartList .item-row:hover {
+            transform: translateY(-4px);
+            background: rgba(255, 245, 230, 0.4);
+            border-color: rgba(255, 150, 70, 0.95);
+            box-shadow: 0 18px 28px -8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 140, 60, 0.5);
+        }
+
+        #cartList .price-wrapper {
+            width: 74px;
+            margin-left: 8px;
+            flex-shrink: 0;
+        }
+        
+        #cartList .price-input {
+            width: 100%;
+            padding: 8px 8px;
+            font-size: 13px;
+            text-align: right;
+        }
+
+        #cartList .item-row div[style*="flex:1"] {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            flex-wrap: wrap;
+        }
+        #cartList .item-row span {
+            font-size: 15px;
+            font-weight: 500;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+
+<div id="saveIndicator">☁︎ 同步中</div>
+
+<div class="header-bar">
+    <button class="back-btn" onclick="location.href='index.html'">←</button>
+    <div class="header-title">🛒 采购管理</div>
+    <div style="width:38px;"></div>
+</div>
+
+<div class="tabs">
+    <button id="btn-pick" class="tab-btn active" onclick="switchTab('pick')">📦 选品库</button>
+    <button id="btn-cart" class="tab-btn" onclick="switchTab('cart')">📋 采购单 (<span id="cartCount">0</span>)</button>
+</div>
+
+<div id="pickTab" class="tab-content active">
+    <div id="productList">🔥 加载中...</div>
+    <button class="primary-btn" onclick="openItemModal()">+ 添加新菜品</button>
+</div>
+
+<div id="cartTab" class="tab-content">
+    <div class="quick-add-bar">
+        <input type="text" id="customName" class="quick-input" placeholder="品名 (例: 香辣牛肉串)">
+        <input type="number" id="customPrice" class="quick-price" placeholder="单价">
+        <button class="add-btn" onclick="addCustomItem()">添加</button>
+    </div>
+    <div id="cartList"></div>
+    <button class="primary-btn" style="background: #cf5016;" onclick="clearPurchased()">🔥 清除已买项目</button>
+</div>
+
+<div class="total-bar" id="totalBar" style="display:none;">
+    <div id="grandTotal" style="font-weight: bold;">0 Ks</div>
+    <button onclick="copyText()" style="background:#fa6928; color:white; border:none; padding:10px 26px; border-radius:60px; font-weight:bold; backdrop-filter:blur(4px);">📋 复制发送</button>
+</div>
+
+<div id="itemModal" class="modal-overlay" onclick="closeItemModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <h3 style="margin-top:0; color:#b8591a;">🍢 编辑菜品</h3>
+        <input type="text" id="itemName" class="modal-input" placeholder="名称 (烤生蚝/羊排)">
+        <div style="position: relative;">
+            <input type="text" id="itemCat" class="modal-input" placeholder="分类 (点击查看已有)" onfocus="showDropdown()" autocomplete="off">
+            <div id="catDropdown" class="cat-dropdown"></div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:20px;">
+            <button onclick="closeItemModal()" style="flex:1; padding:12px; border:none; border-radius:40px; background:#4e3a28; color:#ffdbb5;">取消</button>
+            <button onclick="saveItem()" class="primary-btn" style="flex:1; margin-top:0;">保存</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ==================== 方案三 + 选品库勾选即时刷新采购单 ====================
+    // 修复：在选品库打勾/取消勾选时，立即刷新采购单的显示，无需切换页面
+    
+    const firebaseConfig = { 
+        apiKey: "AIzaSyAQGZJpFrveak_gvga6Q8Q5MbxlDVVsxXE", 
+        authDomain: "yeyekao-3878d.firebaseapp.com", 
+        projectId: "yeyekao-3878d", 
+        storageBucket: "yeyekao-3878d.firebasestorage.app", 
+        messagingSenderId: "560765118345", 
+        appId: "1:560765118345:web:5f24d021e7a6db90b76358" 
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const DOC_ID = "main_list";
+
+    let globalData = { productTemplate: {}, cartData: [] };
+    let isSyncing = false;
+
+    db.collection("shopping_list").doc(DOC_ID).onSnapshot((doc) => {
+        if (doc.exists) {
+            globalData = doc.data();
+            renderAll();
+        }
+    });
+
+    function formatNumber(num) {
+        if (num === null || num === undefined || num === "") return "0";
+        let n = parseFloat(num);
+        if (isNaN(n)) return "0";
+        return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+    async function performSync() {
+        if (isSyncing) return;
+        isSyncing = true;
+        const indicator = document.getElementById('saveIndicator');
+        if (indicator) indicator.classList.add('show');
+        try {
+            await db.collection("shopping_list").doc(DOC_ID).set(globalData);
+        } catch (e) {
+            console.warn("同步失败", e);
+        }
+        if (indicator) {
+            setTimeout(() => indicator.classList.remove('show'), 800);
+        }
+        isSyncing = false;
+    }
+
+    function sync() {
+        performSync();
+    }
+
+    // 刷新采购单显示（不重新渲染整个页面，只更新采购单区域）
+    function refreshCartDisplay() {
+        const cartList = document.getElementById('cartList');
+        if (!cartList) return;
+        cartList.innerHTML = '';
+        (globalData.cartData || []).forEach((item, idx) => {
+            const row = document.createElement('div');
+            row.className = 'item-row';
+            const isPurchased = !!item.purchased;
+            if (isPurchased) {
+                row.style.background = "rgba(80, 40, 15, 0.9)";
+                row.style.backdropFilter = "blur(10px)";
+                row.style.borderColor = "#cd7a32";
+            } else {
+                row.style.background = "rgba(255, 240, 210, 0.22)";
+                row.style.backdropFilter = "blur(12px)";
+                row.style.borderColor = "rgba(255, 170, 80, 0.6)";
+            }
+            row.innerHTML = `
+                <div style="flex:1;" onclick="toggleDone(${idx}, ${!item.purchased})">
+                    <input type="checkbox" ${item.purchased ? 'checked' : ''}>
+                    <span style="margin-left:8px; ${item.purchased ? 'text-decoration:line-through;color:#f7ca9c;' : 'color:#ffefcf;'}">${item.name} (x${item.qty})</span>
+                </div>
+                <div class="price-wrapper">
+                    <input type="text" class="price-input" inputmode="decimal" placeholder="Ks" value="${item.price ? formatNumber(item.price) : ''}" 
+                           oninput="handlePriceInput(${idx}, this)" 
+                           onblur="handlePriceBlur(${idx}, this)">
+                </div>
+            `;
+            cartList.appendChild(row);
+        });
+        document.getElementById('cartCount').innerText = (globalData.cartData || []).length;
+        updateTotal();
+    }
+
+    function addCustomItem() {
+        const name = document.getElementById('customName').value.trim();
+        const price = document.getElementById('customPrice').value.trim();
+        if (!name) return;
+        globalData.cartData.push({ name, qty: 1, purchased: price !== "", price: price || "" });
+        document.getElementById('customName').value = "";
+        document.getElementById('customPrice').value = "";
+        refreshCartDisplay();  // 刷新采购单显示
+        sync();
+    }
+
+    function renderAll() {
+        const pickList = document.getElementById('productList');
+        if(!pickList) return;
+        pickList.innerHTML = '';
+        const tmpl = globalData.productTemplate || {};
+        const cartNames = new Set((globalData.cartData || []).map(i => i.name));
+
+        Object.keys(tmpl).sort().forEach(cat => {
+            const group = document.createElement('div');
+            group.className = 'category-group';
+            group.innerHTML = `<div class="category-header">🔥 ${cat}</div>`;
+            tmpl[cat].forEach((item, idx) => {
+                const row = document.createElement('div');
+                row.className = 'item-row';
+                row.innerHTML = `
+                    <div style="flex:1;" onclick="toggleCart('${item.name}', ${!cartNames.has(item.name)}, ${item.qty})">
+                        <input type="checkbox" ${cartNames.has(item.name) ? 'checked' : ''}>
+                        <span style="margin-left:8px;">${item.name}</span>
+                    </div>
+                    <div class="qty-ctrl">
+                        <button class="qty-btn" onclick="event.stopPropagation();changeQty('${cat}', ${idx}, -1)">-</button>
+                        <span>${item.qty}</span>
+                        <button class="qty-btn" onclick="event.stopPropagation();changeQty('${cat}', ${idx}, 1)">+</button>
+                    </div>
+                    <div class="action-btn-group">
+                        <button style="border:none;background:none;color:#ffb569;padding:5px;font-size:18px;" onclick="event.stopPropagation();openItemModal('${cat}', ${idx})">✎</button>
+                        <button class="del-btn" onclick="event.stopPropagation();deleteItem('${cat}', ${idx})">×</button>
+                    </div>
+                `;
+                group.appendChild(row);
+            });
+            pickList.appendChild(group);
+        });
+
+        // 刷新采购单显示（重要：保证选品库勾选后采购单立刻更新）
+        refreshCartDisplay();
+    }
+
+    function handlePriceInput(idx, inputElement) {
+        let rawVal = inputElement.value.replace(/,/g, "");
+        if (rawVal === "") rawVal = "";
+        if (isNaN(rawVal)) rawVal = "";
+        globalData.cartData[idx].price = rawVal;
+        globalData.cartData[idx].purchased = rawVal && rawVal !== "";
+        const formatted = rawVal === "" ? "" : formatNumber(rawVal);
+        if (inputElement.value !== formatted) {
+            inputElement.value = formatted;
+        }
+        updateTotal();
+    }
+
+    function handlePriceBlur(idx, inputElement) {
+        let rawVal = inputElement.value.replace(/,/g, "");
+        if (rawVal === "") rawVal = "";
+        if (isNaN(rawVal)) rawVal = "";
+        globalData.cartData[idx].price = rawVal;
+        globalData.cartData[idx].purchased = rawVal && rawVal !== "";
+        const formatted = rawVal === "" ? "" : formatNumber(rawVal);
+        inputElement.value = formatted;
+        updateTotal();
+        sync();
+    }
+
+    function updateTotal() { 
+        const total = (globalData.cartData || []).reduce((sum, i) => sum + (parseFloat(i.price) || 0), 0); 
+        document.getElementById('grandTotal').innerHTML = formatNumber(total) + " Ks"; 
+    }
+    
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(tab + 'Tab').classList.add('active');
+        document.getElementById('btn-' + tab).classList.add('active');
+        document.getElementById('totalBar').style.display = (tab === 'cart') ? 'flex' : 'none';
+        // 切换到采购单时，确保显示最新数据
+        if (tab === 'cart') {
+            refreshCartDisplay();
+        }
+        window.scrollTo(0, 0);
+    }
+    
+    function toggleCart(name, checked, qty) { 
+        if (checked) {
+            globalData.cartData.push({ name, qty, purchased: false, price: '' });
+        } else { 
+            globalData.cartData = globalData.cartData.filter(i => i.name !== name);
+        }
+        // 关键修复：勾选/取消勾选后，立即刷新采购单的显示
+        refreshCartDisplay();
+        sync();
+    }
+    
+    function changeQty(cat, idx, delta) { 
+        globalData.productTemplate[cat][idx].qty = Math.max(1, globalData.productTemplate[cat][idx].qty + delta); 
+        sync();
+    }
+    
+    function toggleDone(idx, checked) { 
+        globalData.cartData[idx].purchased = checked; 
+        refreshCartDisplay();  // 刷新显示勾选状态
+        sync();
+    }
+    
+    function clearPurchased() { 
+        if(confirm("清除已买？")) { 
+            globalData.cartData = globalData.cartData.filter(i => !i.purchased); 
+            refreshCartDisplay();
+            sync();
+        } 
+    }
+    
+    function deleteItem(cat, idx) {
+        if(confirm("确定删除这个商品模板吗？")) {
+            globalData.productTemplate[cat].splice(idx, 1);
+            if(globalData.productTemplate[cat].length === 0) delete globalData.productTemplate[cat];
+            sync();
+        }
+    }
+
+    function openItemModal(cat = null, idx = null) {
+        window.currentEditing = cat ? { cat, idx } : null;
+        if (cat) { document.getElementById('itemName').value = globalData.productTemplate[cat][idx].name; document.getElementById('itemCat').value = cat; }
+        else { document.getElementById('itemName').value = ''; document.getElementById('itemCat').value = ''; }
+        document.getElementById('itemModal').classList.add('open');
+        document.getElementById('catDropdown').style.display = 'none';
+    }
+    function closeItemModal() { document.getElementById('itemModal').classList.remove('open'); }
+    function saveItem() {
+        const name = document.getElementById('itemName').value.trim();
+        const cat = document.getElementById('itemCat').value.trim() || "未分类";
+        if (!name) return;
+        if (window.currentEditing) {
+            globalData.productTemplate[window.currentEditing.cat].splice(window.currentEditing.idx, 1);
+            if(globalData.productTemplate[window.currentEditing.cat].length === 0) delete globalData.productTemplate[window.currentEditing.cat];
+        }
+        if (!globalData.productTemplate[cat]) globalData.productTemplate[cat] = [];
+        globalData.productTemplate[cat].push({ name, qty: 1 });
+        closeItemModal();
+        sync();
+    }
+    function showDropdown() {
+        const dropdown = document.getElementById('catDropdown');
+        const cats = Object.keys(globalData.productTemplate || {}).sort();
+        if (cats.length === 0) return;
+        dropdown.innerHTML = cats.map(c => `<div class="cat-option" onclick="selectCat('${c}')">🍖 ${c}</div>`).join('');
+        dropdown.style.display = 'block';
+    }
+    function selectCat(val) { document.getElementById('itemCat').value = val; document.getElementById('catDropdown').style.display = 'none'; }
+    
+    document.addEventListener('click', function(e) {
+        if (e.target.id !== 'itemCat') document.getElementById('catDropdown').style.display = 'none';
+    });
+    
+    function copyText() {
+        const incomeInput = prompt("请输入今日收入 (Ks):", "");
+        if (incomeInput === null) return;
+        const income = parseFloat(incomeInput.replace(/,/g, "")) || 0;
+        const now = new Date();
+        const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+        const purchasedItems = (globalData.cartData || []).filter(item => item.purchased === true);
+        let text = `📅 日期: ${dateStr}\n📋 采购清单（已勾选项目）\n----------------------\n`;
+        let totalCost = 0;
+        purchasedItems.forEach(i => {
+            const price = parseFloat(i.price) || 0;
+            text += `✅ ${i.name} (x${i.qty})${i.price ? ' : '+formatNumber(i.price)+' Ks' : ''}\n`;
+            totalCost += price;
+        });
+        if (purchasedItems.length === 0) text += `（暂无已勾选的菜品）\n`;
+        const diff = income - totalCost;
+        text += `----------------------\n💰 总计支出: ${formatNumber(totalCost)} Ks\n💰 今日收入：${formatNumber(income)} Ks\n${diff >= 0 ? "💵 今日盈利" : "💵 今日亏损"}：${formatNumber(diff)} Ks`;
+        navigator.clipboard.writeText(text).then(() => alert("已复制已勾选的采购清单！"));
+    }
+    window.copyText = copyText;
+</script>
+</body>
+</html>
